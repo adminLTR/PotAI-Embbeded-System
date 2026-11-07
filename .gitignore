@@ -1,0 +1,45 @@
+# --- Python (03_model_ML) ---
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.egg-info/
+.coverage
+htmlcov/
+dist/
+
+# Modelos sklearn: se regeneran con train.py. El binario del firmware
+# (components/ml_model/model/rf_model.bin) SI se versiona.
+*.pkl
+
+# --- ESP-IDF (01_firmware_esp32) ---
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# --- Secretos ---
+.env
+*.key
+*.pem
+*.crt
+*.crt.pem
+# CA publica de AWS: hace falta para compilar el MQTT/TLS
+!01_firmware_esp32/components/aws_iot_credentials/certs/AmazonRootCA1.pem
+
+# --- Documentos locales / editores / Windows ---
+*.docx
+.idea/
+.vscode/
+*.swp
+*~
+Thumbs.db
+ehthumbs.db
+Desktop.ini

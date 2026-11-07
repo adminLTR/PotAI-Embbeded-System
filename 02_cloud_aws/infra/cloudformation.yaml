@@ -1,0 +1,484 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  PSI3542 Aula 11 - backend IoT fim a fim (DRAFT). Cria DynamoDB, duas Lambdas,
+  IoT Rule, HTTP API e IAM minimo. Nao hospeda o cliente Web.
+
+Parameters:
+  TableName:
+    Type: String
+    Default: PSI3542Telemetry
+  IoTRuleName:
+    Type: String
+    Default: psi3542_a11_telemetry_ingest
+    AllowedPattern: '^[a-zA-Z0-9_]+$'
+  IotDataEndpoint:
+    Type: String
+    Description: 'Endpoint HTTPS do AWS IoT Data-ATS, incluindo https://'
+  ClientOrigin:
+    Type: String
+    Description: 'Origem HTTPS exata do cliente Web, por exemplo https://exemplo.usp.br'
+
+Resources:
+  TelemetryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: thingName
+          AttributeType: S
+        - AttributeName: ingestionKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: thingName
+          KeyType: HASH
+        - AttributeName: ingestionKey
+          KeyType: RANGE
+
+  IngestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: psi3542-a11-ingest-ddb
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt TelemetryTable.Arn
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: psi3542-a11-api-ddb-iot
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                Resource: !GetAtt TelemetryTable.Arn
+              - Effect: Allow
+                Action:
+                  - iot:Publish
+                Resource: !Sub arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topic/psi3542/*/command
+
+  IngestLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/psi3542-a11-ingest
+      RetentionInDays: 7
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/psi3542-a11-api
+      RetentionInDays: 7
+
+  IngestFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: psi3542-a11-ingest
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt IngestRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+      Code:
+        ZipFile: |
+          import os
+          from datetime import datetime, timezone
+          from decimal import Decimal, InvalidOperation
+          
+          import boto3
+          from botocore.exceptions import ClientError
+          
+          
+          TABLE_NAME = os.environ.get("TABLE_NAME", "PSI3542Telemetry")
+          
+          dynamodb = boto3.resource("dynamodb")
+          table = dynamodb.Table(TABLE_NAME)
+          
+          
+          def _required(event, name):
+              if name not in event:
+                  raise ValueError(f"missing field: {name}")
+              return event[name]
+          
+          
+          def _integer_field(event, name, minimum=0):
+              value = _required(event, name)
+              if type(value) is not int or value < minimum:
+                  raise ValueError(f"invalid integer field: {name}")
+              return value
+          
+          
+          def _decimal_field(event, name):
+              value = _required(event, name)
+              if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+                  raise ValueError(f"invalid numeric field: {name}")
+              try:
+                  result = Decimal(str(value))
+              except (InvalidOperation, ValueError):
+                  raise ValueError(f"invalid numeric field: {name}") from None
+              if not result.is_finite():
+                  raise ValueError(f"non-finite numeric field: {name}")
+              return result
+          
+          
+          def lambda_handler(event, context):
+              try:
+                  thing_name = _required(event, "thingName")
+                  device_id = _required(event, "device_id")
+                  if not isinstance(thing_name, str) or not thing_name.startswith("psi3542-"):
+                      raise ValueError("invalid thingName")
+                  if not isinstance(device_id, str) or device_id != thing_name:
+                      raise ValueError("device_id differs from thingName")
+                  seq = _integer_field(event, "seq")
+                  valid = _required(event, "valid")
+                  if type(valid) is not bool:
+                      raise ValueError("valid must be JSON boolean")
+                  sample_uptime_ms = _integer_field(event, "sample_uptime_ms")
+                  ingested_at_ms = _integer_field(event, "ingested_at_ms", minimum=1)
+                  message_trace_id = _required(event, "message_trace_id")
+                  if not isinstance(message_trace_id, str) or not message_trace_id.strip():
+                      raise ValueError("invalid message_trace_id")
+                  temperature_c = _decimal_field(event, "temperature_c")
+                  humidity_pct = _decimal_field(event, "humidity_pct")
+                  if not (Decimal("0") <= humidity_pct <= Decimal("100")):
+                      raise ValueError("humidity_pct outside 0..100")
+                  ingested_at = (
+                      datetime.fromtimestamp(ingested_at_ms / 1000.0, tz=timezone.utc)
+                      .isoformat(timespec="milliseconds")
+                      .replace("+00:00", "Z")
+                  )
+              except (ValueError, TypeError, OverflowError, OSError) as exc:
+                  print(f"REJECTED malformed telemetry: {exc}")
+                  return {"status": "rejected", "reason": str(exc)}
+          
+              ingestion_key = (
+                  f"{ingested_at_ms:013d}"
+                  f"#{seq:010d}"
+                  f"#{message_trace_id}"
+              )
+              item = {
+                  "thingName": thing_name,
+                  "ingestionKey": ingestion_key,
+                  "message_trace_id": message_trace_id,
+                  "ingested_at_ms": ingested_at_ms,
+                  "ingested_at": ingested_at,
+                  "device_id": device_id,
+                  "seq": seq,
+                  "temperature_c": temperature_c,
+                  "humidity_pct": humidity_pct,
+                  "valid": valid,
+                  "sample_uptime_ms": sample_uptime_ms,
+              }
+          
+              try:
+                  table.put_item(
+                      Item=item,
+                      ConditionExpression="attribute_not_exists(ingestionKey)"
+                  )
+              except ClientError as exc:
+                  code = exc.response["Error"]["Code"]
+                  if code == "ConditionalCheckFailedException":
+                      print(
+                          "DUPLICATE ignored "
+                          f"thingName={thing_name} seq={seq} trace={message_trace_id}"
+                      )
+                      return {"status": "duplicate", "thingName": thing_name, "seq": seq}
+                  raise
+          
+              print(
+                  "STORED "
+                  f"thingName={thing_name} seq={seq} trace={message_trace_id} "
+                  f"ingestionKey={ingestion_key}"
+              )
+              return {"status": "stored", "thingName": thing_name, "seq": seq}
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: psi3542-a11-api
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt ApiRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+          IOT_DATA_ENDPOINT: !Ref IotDataEndpoint
+      Code:
+        ZipFile: |
+          import base64
+          import json
+          import os
+          from decimal import Decimal
+          
+          import boto3
+          from boto3.dynamodb.conditions import Key
+          
+          
+          TABLE_NAME = os.environ.get("TABLE_NAME", "PSI3542Telemetry")
+          IOT_DATA_ENDPOINT = os.environ["IOT_DATA_ENDPOINT"]
+          
+          
+          dynamodb = boto3.resource("dynamodb")
+          table = dynamodb.Table(TABLE_NAME)
+          
+          iot_data = boto3.client(
+              "iot-data",
+              endpoint_url=IOT_DATA_ENDPOINT,
+          )
+          
+          
+          def response(status_code, body):
+              return {
+                  "statusCode": status_code,
+                  "headers": {"content-type": "application/json"},
+                  "body": json.dumps(body),
+              }
+          
+          
+          def plain_number(value):
+              if isinstance(value, Decimal):
+                  if value == value.to_integral_value():
+                      return int(value)
+                  return float(value)
+              return value
+          
+          
+          def validate_thing_name(value):
+              if not isinstance(value, str) or not value.startswith("psi3542-"):
+                  return False
+              allowed = set(
+                  "abcdefghijklmnopqrstuvwxyz"
+                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                  "0123456789-_"
+              )
+              return bool(value) and all(c in allowed for c in value)
+          
+          
+          def get_latest(thing_name):
+              result = table.query(
+                  KeyConditionExpression=Key("thingName").eq(thing_name),
+                  ScanIndexForward=False,
+                  Limit=1,
+                  ConsistentRead=True,
+              )
+              items = result.get("Items", [])
+              if not items:
+                  return response(
+                      404,
+                      {"error": "telemetry_not_found", "thingName": thing_name},
+                  )
+          
+              item = items[0]
+              return response(
+                  200,
+                  {
+                      "thingName": item["thingName"],
+                      "seq": plain_number(item["seq"]),
+                      "temperature_c": plain_number(item["temperature_c"]),
+                      "humidity_pct": plain_number(item["humidity_pct"]),
+                      "valid": item["valid"],
+                      "sample_uptime_ms": plain_number(item["sample_uptime_ms"]),
+                      "ingested_at_ms": plain_number(item["ingested_at_ms"]),
+                      "ingested_at": item["ingested_at"],
+                  },
+              )
+          
+          
+          def parse_json_body(event):
+              raw = event.get("body")
+              if raw is None:
+                  raise ValueError("missing body")
+              if event.get("isBase64Encoded", False):
+                  raw = base64.b64decode(raw).decode("utf-8")
+              return json.loads(raw)
+          
+          
+          def post_command(thing_name, event):
+              try:
+                  body = parse_json_body(event)
+              except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+                  return response(400, {"error": "invalid_json"})
+          
+              if (
+                  not isinstance(body, dict)
+                  or set(body.keys()) != {"led"}
+                  or type(body["led"]) is not bool
+              ):
+                  return response(
+                      400,
+                      {"error": "invalid_command", "expected": {"led": "boolean"}},
+                  )
+          
+              payload = json.dumps(
+                  {"led": body["led"]},
+                  separators=(",", ":"),
+              ).encode("utf-8")
+              topic = f"psi3542/{thing_name}/command"
+          
+              iot_data.publish(
+                  topic=topic,
+                  qos=1,
+                  retain=False,
+                  payload=payload,
+              )
+          
+              print(
+                  "COMMAND_ACCEPTED "
+                  f"thingName={thing_name} "
+                  f"led={body['led']} "
+                  f"topic={topic}"
+              )
+          
+              return response(
+                  202,
+                  {
+                      "accepted": True,
+                      "thingName": thing_name,
+                      "command": {"led": body["led"]},
+                  },
+              )
+          
+          
+          def lambda_handler(event, context):
+              route_key = event.get("routeKey", "")
+              path_parameters = event.get("pathParameters") or {}
+              thing_name = path_parameters.get("thingName")
+          
+              if not validate_thing_name(thing_name):
+                  return response(400, {"error": "invalid_thing_name"})
+          
+              if route_key == "GET /devices/{thingName}/telemetry/latest":
+                  return get_latest(thing_name)
+          
+              if route_key == "POST /devices/{thingName}/command":
+                  return post_command(thing_name, event)
+          
+              return response(404, {"error": "route_not_found"})
+
+  IoTRuleInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref IngestFunction
+      Principal: iot.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:rule/${IoTRuleName}
+
+  TelemetryRule:
+    Type: AWS::IoT::TopicRule
+    DependsOn: IoTRuleInvokePermission
+    Properties:
+      RuleName: !Ref IoTRuleName
+      TopicRulePayload:
+        AwsIotSqlVersion: '2016-03-23'
+        RuleDisabled: false
+        Sql: >-
+          SELECT *, topic(2) AS thingName, timestamp() AS ingested_at_ms,
+          traceid() AS message_trace_id FROM 'psi3542/+/telemetry'
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt IngestFunction.Arn
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: psi3542-a11-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref ClientOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+        MaxAge: 300
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 10000
+
+  GetLatestRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizationType: NONE
+      RouteKey: 'GET /devices/{thingName}/telemetry/latest'
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref ApiIntegration
+
+  PostCommandRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizationType: NONE
+      RouteKey: 'POST /devices/{thingName}/command'
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref ApiIntegration
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*
+
+Outputs:
+  ApiBaseUrl:
+    Description: URL base da HTTP API
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  TelemetryTableName:
+    Value: !Ref TableName
+  IngestFunctionName:
+    Value: !Ref IngestFunction
+  ApiFunctionName:
+    Value: !Ref ApiFunction
+  IoTRule:
+    Value: !Ref TelemetryRule

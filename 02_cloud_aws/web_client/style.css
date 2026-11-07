@@ -1,0 +1,13 @@
+:root { font-family: system-ui, -apple-system, Segoe UI, sans-serif; color-scheme: light dark; }
+body { margin: 0; }
+.container { max-width: 760px; margin: 0 auto; padding: 1rem; }
+h1 { margin-bottom: .25rem; }
+.subtitle { margin-top: 0; opacity: .75; }
+.card { border: 1px solid currentColor; border-radius: .5rem; padding: 1rem; margin: 1rem 0; }
+label, .label { display: block; font-size: .9rem; opacity: .8; }
+input { width: 100%; box-sizing: border-box; padding: .7rem; margin: .35rem 0 .75rem; font-size: 1rem; }
+button { padding: .7rem 1rem; margin: .25rem; font-size: 1rem; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+.grid strong { display: block; font-size: 1.35rem; margin-top: .3rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.note { font-size: .9rem; opacity: .8; }

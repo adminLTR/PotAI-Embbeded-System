@@ -1,0 +1,11 @@
+@startuml
+state "CONNECTIVITY_ONLINE" as O
+state "TIME_SYNCED" as T
+state "MQTT_ONLINE" as M
+state "COMMAND_SUBSCRIBED" as S
+[*] --> O : Wi-Fi/IP
+O --> T : SNTP
+T --> M : TLS + MQTT CONNECT
+M --> S : SUBSCRIBE + SUBACK
+note right of O : Estados/condições separados
+@enduml

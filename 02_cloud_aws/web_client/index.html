@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PSI3542 A11 — Cliente IoT</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>PSI3542 — Aula 11</h1>
+    <p class="subtitle">Cliente Web da aplicação IoT fim a fim</p>
+
+    <section class="card">
+      <label for="apiBaseUrl">API Base URL</label>
+      <input id="apiBaseUrl" autocomplete="off" inputmode="url"
+             placeholder="https://xxxxxxxxxx.execute-api.regiao.amazonaws.com">
+
+      <label for="thingName">Thing Name</label>
+      <input id="thingName" autocomplete="off" placeholder="psi3542-g01">
+
+      <button id="refreshBtn">Atualizar telemetria</button>
+      <button id="clearConfigBtn" type="button">Limpar configuração desta aba</button>
+      <p id="status" role="status">Aguardando consulta.</p>
+      <p class="note">A URL da API e o Thing Name ficam apenas na sessão desta aba. Não são credenciais. Use “Limpar configuração” ao terminar no computador compartilhado.</p>
+    </section>
+
+    <section class="card grid">
+      <div><span class="label">Temperatura</span><strong id="temperature">—</strong></div>
+      <div><span class="label">Umidade</span><strong id="humidity">—</strong></div>
+      <div><span class="label">seq</span><strong id="seq">—</strong></div>
+      <div><span class="label">Ingestão UTC</span><strong id="ingestedAt">—</strong></div>
+      <div><span class="label">Validade da amostra</span><strong id="measurementValidity">—</strong></div>
+    </section>
+
+    <section class="card">
+      <h2>Comando do LED</h2>
+      <div class="actions">
+        <button id="ledOnBtn">LIGAR LED</button>
+        <button id="ledOffBtn">DESLIGAR LED</button>
+      </div>
+      <p id="commandStatus" role="status">Nenhum comando enviado.</p>
+      <p class="note">A resposta da API confirma aceitação pelo backend; não confirma execução física no ESP32.</p>
+    </section>
+  </main>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

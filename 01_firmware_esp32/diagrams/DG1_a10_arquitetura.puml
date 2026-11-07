@@ -1,0 +1,14 @@
+@startuml
+left to right direction
+rectangle "ESP32\nA10" as E
+rectangle "connectivity\nONLINE" as C
+rectangle "time_sync\nSYNCED" as T
+rectangle "mqtt_service\nMQTT_ONLINE" as M
+cloud "AWS IoT Core" as AWS
+rectangle "MQTT Test Client" as TEST
+E --> C
+C --> T
+T --> M
+M <--> AWS : MQTT/TLS + X.509
+AWS <--> TEST : publish/subscribe
+@enduml

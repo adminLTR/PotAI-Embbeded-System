@@ -1,0 +1,21 @@
+@startuml
+top to bottom direction
+rectangle "sensor_task / event_task" as L
+queue "publish_queue" as Q
+rectangle "mqtt_task" as MT
+rectangle "mqtt_service" as MS
+rectangle "mqtt_adapter / ESP-MQTT" as MA
+cloud "AWS IoT Core" as AWS
+rectangle "cloud_command" as CC
+queue "command_queue" as CQ
+rectangle "command_task" as CT
+rectangle "LED GPIO2" as LED
+L --> Q --> MT --> MS --> MA --> AWS
+AWS --> MA --> MS --> CC --> CQ --> CT --> LED
+
+note bottom
+Extensão v07: mqtt_task publica health periódico em
+psi3542/<thingName>/health. Falha/recuperação do DHT11
+gera eventos somente em transições.
+end note
+@enduml

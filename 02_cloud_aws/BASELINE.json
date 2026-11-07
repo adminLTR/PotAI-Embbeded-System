@@ -1,0 +1,27 @@
+{
+  "version": "v04.14_DRAFT",
+  "telemetry_topic": "psi3542/<thingName>/telemetry",
+  "telemetry_qos": 0,
+  "command_topic": "psi3542/<thingName>/command",
+  "command_qos": 1,
+  "command_payload": {
+    "led": "boolean"
+  },
+  "table": "PSI3542Telemetry",
+  "partition_key": "thingName",
+  "sort_key": "ingestionKey",
+  "get_route": "GET /devices/{thingName}/telemetry/latest",
+  "post_route": "POST /devices/{thingName}/command",
+  "post_success_status": 202,
+  "api_authorization": "NONE (lab limitation)",
+  "firmware_baseline": "A10 firmware v07 DRAFT from A10 package v15 DRAFT (external dependency; experimental gates pending)",
+  "operational_route": "AWS Console first; CloudShell optional; no local AWS CLI required for students",
+  "web_client_config": "API Base URL and Thing Name entered in UI; sessionStorage tab-local with explicit clear button",
+  "software_version": "v04.14_DRAFT",
+  "deployment_model": "one_aws_account_per_student_same_account_and_region_as_a10",
+  "validation_status": "static_tests_only; no real AWS/ESP32 T1-T12",
+  "cloudwatch_log_groups": "2 CloudFormation-managed log groups, retention 7 days",
+  "release_note": "Synchronized A11 didactic distribution v04.2; executable code unchanged from cloud v02.2 DRAFT",
+  "firmware_included": "A10 firmware v07 DRAFT, byte-identical to the 66 files in A10 v15 DRAFT (individual credentials excluded)",
+  "functional_changes": "None in A10 firmware and A11 cloud executable files compared to source baselines."
+}

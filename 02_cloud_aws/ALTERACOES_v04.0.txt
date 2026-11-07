@@ -1,0 +1,6 @@
+PSI3542 Aula 11 — Software cloud v04.2.0 DRAFT
+
+Renumeracao coordenada dos artefatos da Aula 11.
+Sem alteracoes funcionais em Lambda, CloudFormation, cliente Web ou testes em relacao ao software cloud v04.14 DRAFT.
+Firmware do ESP32 permanece A10 v07 DRAFT, distribuido no pacote A10 v15 DRAFT.
+Validacao AWS real/ESP32 real pendente.
