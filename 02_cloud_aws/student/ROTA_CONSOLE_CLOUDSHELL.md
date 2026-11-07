@@ -39,10 +39,11 @@ aws iot describe-endpoint --endpoint-type iot:Data-ATS
 5. Avance.
 6. Nome da stack: `psi3542-a11`.
 7. Parâmetro `IotDataEndpoint`: `https://<endpoint-copiado-do-IoT-Core>`.
-8. Parâmetro `ClientOrigin`: use a origem HTTPS do cliente Web fornecida no Moodle/roteiro.
-9. Mantenha os demais valores padrão.
-10. Na etapa final, reconheça que o template cria recursos IAM. Se a conta não permitir criar IAM roles, consulte o professor; não utilize access keys locais nem mude para root.
-11. Crie a stack e aguarde `CREATE_COMPLETE`.
+8. Parâmetro `ClientOrigin`: use a origem HTTPS do cliente Web fornecida no Moodle/roteiro (o app Flutter não usa CORS).
+9. PotAI: primeiro gere `dist/ingest.zip` e `dist/api.zip` com `python build_backend_zip.py`, suba-os a um bucket S3 na mesma Região (`potai/ingest.zip`, `potai/api.zip`) e preencha `CodeBucket` com o nome desse bucket. Detalhes em `../POTAI_BACKEND.md`.
+10. Mantenha os demais valores padrão.
+11. Na etapa final, reconheça que o template cria recursos IAM. Se a conta não permitir criar IAM roles, consulte o professor; não utilize access keys locais nem mude para root.
+12. Crie a stack e aguarde `CREATE_COMPLETE`.
 
 ## Etapa 3 — obter a URL da API
 

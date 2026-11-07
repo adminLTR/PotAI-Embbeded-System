@@ -41,7 +41,8 @@ uint32_t irrigation_duration_ms(float ml, uint32_t flow_ml_per_min, uint32_t max
 }
 
 /* Executa uma irrigacao completa. Retorna os ml efetivamente entregues. */
-static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t count_after)
+static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t count_after,
+                         float soil_before_pct, float temperature_c)
 {
     const uint64_t t_start = now_ms();
 
@@ -71,6 +72,20 @@ static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t coun
     device_state_update_irrigation(false, ml_predicted, delivered, count_after, now_ms());
     emit_event("pump_off");
     ESP_LOGI(TAG, "[IA] bomba OFF: entregue~%.0f ml (riegos=%lu)", (double)delivered, (unsigned long)count_after);
+
+    if (s_cfg.record_cb != NULL) {
+        const irrigation_record_t rec = {
+            .seq = count_after,
+            .plant_id = s_cfg.plant_id,
+            .soil_moisture_pct = soil_before_pct,
+            .temperature_c = temperature_c,
+            .ml_predicted = ml_predicted,
+            .ml_delivered = delivered,
+            .duration_ms = (uint32_t)(now_ms() - t_start),
+            .uptime_ms = now_ms(),
+        };
+        s_cfg.record_cb(&rec, s_cfg.record_ctx);
+    }
     return delivered;
 }
 
@@ -126,7 +141,7 @@ static void irrigation_task(void *arg)
             continue;
         }
         count++;
-        water_plant(ml, duration_ms, count);
+        water_plant(ml, duration_ms, count, snap.soil_moisture_pct, snap.temperature_c);
         last_end_ms = now_ms();
         had_irrigation = true;
     }

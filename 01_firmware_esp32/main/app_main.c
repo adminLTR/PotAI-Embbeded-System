@@ -33,6 +33,7 @@ typedef enum { PUBLISH_ITEM_TELEMETRY=0, PUBLISH_ITEM_EVENT } publish_item_type_
 typedef struct { publish_item_type_t type; telemetry_data_t telemetry; char event_name[32]; } publish_item_t;
 static QueueHandle_t s_publish_queue=NULL;
 static QueueHandle_t s_command_queue=NULL;
+static QueueHandle_t s_irrigation_queue=NULL; /* riegos concluidos pendientes de enviar a AWS */
 static bool s_mqtt_enabled=false;
 static TaskHandle_t s_event_task_handle=NULL;
 static volatile uint32_t s_raw_isr_count;
@@ -177,7 +178,8 @@ static void sensor_task(void *arg)
         health_record_sensor_result(valid,sample_time);
         if(!valid&&!s_sensor_fault_active){s_sensor_fault_active=true;publish_item_t ev={.type=PUBLISH_ITEM_EVENT};strlcpy(ev.event_name,"sensor_unavailable",sizeof(ev.event_name));enqueue_publish_item(&ev);}
         else if(valid&&s_sensor_fault_active){s_sensor_fault_active=false;publish_item_t ev={.type=PUBLISH_ITEM_EVENT};strlcpy(ev.event_name,"sensor_recovered",sizeof(ev.event_name));enqueue_publish_item(&ev);}
-        if(valid){device_snapshot_t snap;device_state_copy(&snap);publish_item_t item={.type=PUBLISH_ITEM_TELEMETRY,.telemetry={.device_id=CONFIG_A10_THING_NAME,.seq=++s_telemetry_seq,.temperature_c=snap.temperature_c,.humidity_pct=snap.humidity_pct,.valid=snap.sample_valid,.sample_uptime_ms=snap.sample_uptime_ms}};enqueue_publish_item(&item);}
+        if(valid){device_snapshot_t snap;device_state_copy(&snap);publish_item_t item={.type=PUBLISH_ITEM_TELEMETRY,.telemetry={.device_id=CONFIG_A10_THING_NAME,.seq=++s_telemetry_seq,.temperature_c=snap.temperature_c,.humidity_pct=snap.humidity_pct,.valid=snap.sample_valid,.sample_uptime_ms=snap.sample_uptime_ms,
+            .soil_moisture_pct=snap.soil_moisture_pct,.soil_valid=snap.soil_valid,.plant_id=CONFIG_A10_PLANT_ID,.ml_predicted=snap.last_ml_predicted,.pump_on=snap.pump_on,.irrigation_count=snap.irrigation_count}};enqueue_publish_item(&item);}
         vTaskDelayUntil(&last,pdMS_TO_TICKS(CONFIG_A10_SENSOR_PERIOD_MS));
     }
 }
@@ -216,6 +218,8 @@ static void mqtt_task(void *arg)
             if(hret!=ESP_OK)ESP_LOGW(TAG,"health publish failed: %s",esp_err_to_name(hret));
             last_health_tick=xTaskGetTickCount();
         }
+        irrigation_report_data_t irrigation_report;
+        if(s_irrigation_queue!=NULL&&xQueueReceive(s_irrigation_queue,&irrigation_report,0)==pdTRUE){esp_err_t iret=mqtt_service_publish_irrigation(&irrigation_report);if(iret!=ESP_OK)ESP_LOGW(TAG,"irrigation publish failed: %s",esp_err_to_name(iret));}
         if(xQueueReceive(s_publish_queue,&item,pdMS_TO_TICKS(500))==pdTRUE){esp_err_t ret=item.type==PUBLISH_ITEM_TELEMETRY?mqtt_service_publish_telemetry(&item.telemetry):mqtt_service_publish_event(item.event_name);if(ret!=ESP_OK)ESP_LOGW(TAG,"publish failed after dequeue; item is not requeued: %s",esp_err_to_name(ret));}
     }
 }
@@ -238,6 +242,15 @@ static void mqtt_task(void *arg)
 
 static void irrigation_event_cb(const char *event_name,void *ctx){(void)ctx;publish_item_t ev={.type=PUBLISH_ITEM_EVENT};strlcpy(ev.event_name,event_name,sizeof(ev.event_name));enqueue_publish_item(&ev);}
 
+/* Riego concluido -> fila propia (mas prioritaria que la telemetria). Si se llena, descarta el mas antiguo. */
+static void irrigation_record_cb(const irrigation_record_t *r,void *ctx)
+{
+    (void)ctx;if(r==NULL||s_irrigation_queue==NULL)return;
+    irrigation_report_data_t rep={.device_id=CONFIG_A10_THING_NAME,.seq=r->seq,.plant_id=r->plant_id,.soil_moisture_pct=r->soil_moisture_pct,.temperature_c=r->temperature_c,
+        .ml_predicted=r->ml_predicted,.ml_delivered=r->ml_delivered,.duration_ms=r->duration_ms,.pump_uptime_ms=r->uptime_ms};
+    if(xQueueSend(s_irrigation_queue,&rep,0)!=pdTRUE){irrigation_report_data_t old;xQueueReceive(s_irrigation_queue,&old,0);health_record_publish_drop();xQueueSend(s_irrigation_queue,&rep,0);}
+}
+
 /* Atuadores e sensor de solo: inicializados cedo, com a bomba garantidamente desligada. */
 static void init_irrigation_hardware(void)
 {
@@ -253,6 +266,7 @@ static void start_irrigation_and_ui(void)
 {
     esp_err_t mret=ml_model_init();
     if(mret!=ESP_OK)ESP_LOGE(TAG,"[ML] modelo invalido (%s): irrigacao automatica desabilitada. Rode 03_model_ML/export_model_esp32.py",esp_err_to_name(mret));
+    ESP_LOGI(TAG,"[POTAI] plant_id=%u (1=ajo .. 8=tomatecherry)",(unsigned)CONFIG_A10_PLANT_ID);
 #if CONFIG_A10_LCD_ENABLED
     display_ui_config_t ui={
         .lcd={.sda_gpio=CONFIG_A10_LCD_I2C_SDA_GPIO,.scl_gpio=CONFIG_A10_LCD_I2C_SCL_GPIO,.address=(uint8_t)CONFIG_A10_LCD_I2C_ADDR,.freq_hz=CONFIG_A10_LCD_I2C_FREQ_HZ,.backlight=A10_LCD_BACKLIGHT},
@@ -264,7 +278,7 @@ static void start_irrigation_and_ui(void)
     if(mret==ESP_OK){
         irrigation_config_t ir={.plant_id=CONFIG_A10_PLANT_ID,.check_period_ms=CONFIG_A10_IRRIGATION_CHECK_PERIOD_MS,.cooldown_s=CONFIG_A10_IRRIGATION_COOLDOWN_S,.min_ml=CONFIG_A10_IRRIGATION_MIN_ML,
             .flow_ml_per_min=CONFIG_A10_PUMP_FLOW_ML_PER_MIN,.max_on_ms=CONFIG_A10_PUMP_MAX_ON_MS,.soil_max_pct=(float)CONFIG_A10_IRRIGATION_SOIL_MAX_PCT,
-            .max_sample_age_ms=3u*CONFIG_A10_SENSOR_PERIOD_MS+1000u,.beep_count=CONFIG_A10_PUMP_BEEP_COUNT,.event_cb=irrigation_event_cb,.event_ctx=NULL};
+            .max_sample_age_ms=3u*CONFIG_A10_SENSOR_PERIOD_MS+1000u,.beep_count=CONFIG_A10_PUMP_BEEP_COUNT,.event_cb=irrigation_event_cb,.event_ctx=NULL,.record_cb=irrigation_record_cb,.record_ctx=NULL};
         esp_err_t iret=irrigation_start(&ir);
         if(iret!=ESP_OK)ESP_LOGE(TAG,"[IRRIGATION] start falhou: %s",esp_err_to_name(iret));
     }
@@ -286,8 +300,8 @@ void app_main(void)
     bool endpoint_valid=mqtt_service_endpoint_is_valid(CONFIG_A10_AWS_IOT_ENDPOINT);
     bool credentials_ready=aws_iot_credentials_are_provisioned();
     if(mqtt_init==ESP_OK&&endpoint_valid&&credentials_ready){
-        s_mqtt_enabled=true;s_publish_queue=xQueueCreate(CONFIG_A10_PUBLISH_QUEUE_LEN,sizeof(publish_item_t));s_command_queue=xQueueCreate(CONFIG_A10_COMMAND_QUEUE_LEN,sizeof(cloud_command_t));
-        if(s_publish_queue==NULL||s_command_queue==NULL){ESP_LOGE(TAG,"falha ao criar filas MQTT/comando");ESP_ERROR_CHECK(ESP_ERR_NO_MEM);}
+        s_mqtt_enabled=true;s_publish_queue=xQueueCreate(CONFIG_A10_PUBLISH_QUEUE_LEN,sizeof(publish_item_t));s_command_queue=xQueueCreate(CONFIG_A10_COMMAND_QUEUE_LEN,sizeof(cloud_command_t));s_irrigation_queue=xQueueCreate(8,sizeof(irrigation_report_data_t));
+        if(s_publish_queue==NULL||s_command_queue==NULL||s_irrigation_queue==NULL){ESP_LOGE(TAG,"falha ao criar filas MQTT/comando");ESP_ERROR_CHECK(ESP_ERR_NO_MEM);}
         ESP_LOGI(TAG,"[AWS_IOT] thing=%s endpoint=%s credentials=provisioned",CONFIG_A10_THING_NAME,CONFIG_A10_AWS_IOT_ENDPOINT);
     }else if(mqtt_init!=ESP_OK)ESP_LOGW(TAG,"mqtt_service_init falhou; MQTT/AWS desabilitado: %s",esp_err_to_name(mqtt_init));
     else if(!endpoint_configured)ESP_LOGW(TAG,"[AWS_IOT] endpoint vazio: MQTT/AWS desabilitado para este boot");

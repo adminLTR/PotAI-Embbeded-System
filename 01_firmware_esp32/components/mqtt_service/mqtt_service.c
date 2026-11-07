@@ -112,9 +112,18 @@ esp_err_t mqtt_service_publish_telemetry(const telemetry_data_t *data)
 {
     if(!is_initialized()||mqtt_service_get_state()!=MQTT_SERVICE_ONLINE)return ESP_ERR_INVALID_STATE;
     if(data==NULL||data->device_id==NULL||strcmp(data->device_id,s_config.thing_name)!=0)return ESP_ERR_INVALID_ARG;
-    char topic[96],payload[224];ESP_RETURN_ON_ERROR(mqtt_service_build_topic(s_config.thing_name,"telemetry",topic,sizeof(topic)),TAG,"topic");ESP_RETURN_ON_ERROR(telemetry_encode_json(data,payload,sizeof(payload)),TAG,"payload");
+    char topic[96],payload[384];ESP_RETURN_ON_ERROR(mqtt_service_build_topic(s_config.thing_name,"telemetry",topic,sizeof(topic)),TAG,"topic");ESP_RETURN_ON_ERROR(telemetry_encode_json(data,payload,sizeof(payload)),TAG,"payload");
     ESP_LOGI(TAG,"[MQTT] publish telemetry seq=%lu topic=%s",(unsigned long)data->seq,topic);
     return mqtt_adapter_publish(topic,payload,s_config.telemetry_qos);
+}
+
+esp_err_t mqtt_service_publish_irrigation(const irrigation_report_data_t *data)
+{
+    if(!is_initialized()||mqtt_service_get_state()!=MQTT_SERVICE_ONLINE)return ESP_ERR_INVALID_STATE;
+    if(data==NULL||data->device_id==NULL||strcmp(data->device_id,s_config.thing_name)!=0)return ESP_ERR_INVALID_ARG;
+    char topic[96],payload[256];ESP_RETURN_ON_ERROR(mqtt_service_build_topic(s_config.thing_name,"irrigation",topic,sizeof(topic)),TAG,"topic");ESP_RETURN_ON_ERROR(irrigation_report_encode_json(data,payload,sizeof(payload)),TAG,"irrigation payload");
+    ESP_LOGI(TAG,"[MQTT] publish irrigation seq=%lu delivered=%.0f ml topic=%s",(unsigned long)data->seq,(double)data->ml_delivered,topic);
+    return mqtt_adapter_publish(topic,payload,s_config.event_qos);
 }
 
 esp_err_t mqtt_service_publish_event(const char *event_name)

@@ -28,4 +28,5 @@ void mqtt_service_handle_adapter_event(const mqtt_adapter_event_data_t *event, v
 esp_err_t mqtt_service_build_topic(const char *thing_name, const char *kind, char *buffer, size_t buffer_len);
 esp_err_t mqtt_service_publish_telemetry(const telemetry_data_t *data);
 esp_err_t mqtt_service_publish_event(const char *event_name);
+esp_err_t mqtt_service_publish_irrigation(const irrigation_report_data_t *data);
 esp_err_t mqtt_service_publish_health(const health_data_t *data);

@@ -34,6 +34,12 @@ managed_components/
 # CA publica de AWS: hace falta para compilar el MQTT/TLS
 !01_firmware_esp32/components/aws_iot_credentials/certs/AmazonRootCA1.pem
 
+# --- Flutter (04_app_potai) ---
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
 # --- Documentos locales / editores / Windows ---
 *.docx
 .idea/

@@ -195,13 +195,45 @@ menu "Riego automatico con IA (edge computing)"
                 Si esta en n, el firmware solo mide y muestra datos; la bomba
                 nunca se activa.
 
-        config A10_PLANT_ID
-            int "Planta (localname del modelo, 1..8)"
-            range 1 8
-            default 1
+        choice A10_PLANT_TYPE
+            prompt "Tipo de planta"
+            default A10_PLANT_TYPE_AJO
             help
-                Es el id de planta usado al entrenar el modelo (columna localname
-                del dataset). El modelo actual conoce los ids 1 a 8.
+                El modelo recibe el tipo de planta como numero (columna
+                localname del dataset). La regla es: id = posicion de la
+                especie en la lista de especies del proyecto (1..8). El mismo
+                mapa existe en el backend (02_cloud_aws/lambda_api/plants.py);
+                si cambia aqui, cambie alla.
+
+            config A10_PLANT_TYPE_AJO
+                bool "ajo (id 1)"
+            config A10_PLANT_TYPE_GERANIO
+                bool "geranio (id 2)"
+            config A10_PLANT_TYPE_HIERBABUENA
+                bool "hierbabuena (id 3)"
+            config A10_PLANT_TYPE_MENTA
+                bool "menta (id 4)"
+            config A10_PLANT_TYPE_OREGANO
+                bool "oregano (id 5)"
+            config A10_PLANT_TYPE_ORQUIDEA
+                bool "orquidea (id 6)"
+            config A10_PLANT_TYPE_ROSACHINA
+                bool "rosachina (id 7)"
+            config A10_PLANT_TYPE_TOMATECHERRY
+                bool "tomatecherry (id 8)"
+        endchoice
+
+        config A10_PLANT_ID
+            int
+            default 1 if A10_PLANT_TYPE_AJO
+            default 2 if A10_PLANT_TYPE_GERANIO
+            default 3 if A10_PLANT_TYPE_HIERBABUENA
+            default 4 if A10_PLANT_TYPE_MENTA
+            default 5 if A10_PLANT_TYPE_OREGANO
+            default 6 if A10_PLANT_TYPE_ORQUIDEA
+            default 7 if A10_PLANT_TYPE_ROSACHINA
+            default 8 if A10_PLANT_TYPE_TOMATECHERRY
+            default 1
 
         config A10_IRRIGATION_CHECK_PERIOD_MS
             int "Periodo de decision de la IA (ms)"

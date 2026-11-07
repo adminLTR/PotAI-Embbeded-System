@@ -16,6 +16,15 @@ static const char *TAG = "DISPLAY_UI";
 static display_ui_config_t s_cfg;
 static bool s_started;
 
+/* Mismos ids que menuconfig / 02_cloud_aws/lambda_api/plants.py / train.py. */
+static const char *plant_common_name(uint8_t plant_id)
+{
+    static const char *names[] = {
+        "?", "ajo", "geranio", "hierbabuena", "menta", "oregano", "orquidea", "rosachina", "tomatecherry",
+    };
+    return (plant_id >= 1 && plant_id <= 8) ? names[plant_id] : names[0];
+}
+
 void display_ui_format_page(uint8_t page, uint8_t plant_id, const device_snapshot_t *s,
                             char line0[17], char line1[17])
 {
@@ -41,7 +50,7 @@ void display_ui_format_page(uint8_t page, uint8_t plant_id, const device_snapsho
         } else {
             snprintf(line0, 17, "Hum.Suelo: -- %%");
         }
-        snprintf(line1, 17, "Planta: %u", (unsigned)plant_id);
+        snprintf(line1, 17, "%s", plant_common_name(plant_id));
         break;
     default:
         snprintf(line0, 17, "IA: %.0f ml", (double)s->last_ml_predicted);

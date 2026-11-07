@@ -9,6 +9,20 @@ extern "C" {
 
 typedef void (*irrigation_event_cb_t)(const char *event_name, void *ctx);
 
+/* Resumo de uma irrigacao concluida (para enviar a nuvem/app). */
+typedef struct {
+    uint32_t seq;               /* numero da irrigacao desde o boot */
+    uint8_t plant_id;
+    float soil_moisture_pct;    /* umidade do solo ANTES de regar */
+    float temperature_c;
+    float ml_predicted;         /* decisao da IA */
+    float ml_delivered;         /* estimado pelo tempo de bomba x vazao */
+    uint32_t duration_ms;
+    uint64_t uptime_ms;         /* instante do fim da irrigacao */
+} irrigation_record_t;
+
+typedef void (*irrigation_record_cb_t)(const irrigation_record_t *record, void *ctx);
+
 typedef struct {
     uint8_t plant_id;             /* 1..8: entrada "localname" do modelo */
     uint32_t check_period_ms;     /* periodo de decisao da IA */
@@ -21,6 +35,8 @@ typedef struct {
     uint32_t beep_count;          /* bips ao ligar a bomba (0 = sem buzzer) */
     irrigation_event_cb_t event_cb; /* "pump_on" / "pump_off" (pode ser NULL) */
     void *event_ctx;
+    irrigation_record_cb_t record_cb; /* ao concluir cada irrigacao (pode ser NULL) */
+    void *record_ctx;
 } irrigation_config_t;
 
 /* Cria a task de irrigacao automatica. Requer ml_model_init() e pump_init() previos. */
