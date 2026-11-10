@@ -30,7 +30,7 @@ class Settings {
     if (demo) return null;
     final url = apiBaseUrl.trim();
     if (!RegExp(r'^https?://[A-Za-z0-9.-]+(:\d+)?(/\S*)?$').hasMatch(url)) {
-      return 'La URL debe empezar con https:// (la copias de CloudFormation → Outputs → ApiBaseUrl).';
+      return 'La URL debe ser http://... o https://... (servidor local o ApiBaseUrl de AWS).';
     }
     if (!_thingRegex.hasMatch(thingName.trim())) {
       return 'El nombre del dispositivo debe ser como psi3542-g01.';

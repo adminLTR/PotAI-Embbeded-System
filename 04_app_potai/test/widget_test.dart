@@ -168,6 +168,7 @@ void main() {
     expect(const Settings(apiBaseUrl: 'abc', thingName: 'psi3542-g01').validate(), isNotNull);
     expect(const Settings(apiBaseUrl: 'https://x.execute-api.sa-east-1.amazonaws.com', thingName: 'otro').validate(), isNotNull);
     expect(const Settings(apiBaseUrl: 'https://x.execute-api.sa-east-1.amazonaws.com', thingName: 'psi3542-g01').validate(), isNull);
+    expect(const Settings(apiBaseUrl: 'http://192.168.0.10:8080', thingName: 'psi3542-g01').validate(), isNull);
     expect(const Settings(demo: true).validate(), isNull);
   });
 

@@ -102,3 +102,15 @@ Riego (se envía al terminar de regar):
 - Pruebas locales del backend (sin AWS): `python -m unittest discover -s tests`
   desde `02_cloud_aws`. No se probó con AWS real.
 - Modo **Demo** de la app: datos de ejemplo sin backend ni ESP32.
+- **API local** (misma interfaz que AWS, DynamoDB en memoria). No simula IoT Core
+  ni el MQTT de la ESP32; sirve para la app y el teléfono:
+
+  ```text
+  cd 02_cloud_aws
+  python local_server.py
+  # o: docker compose up --build
+  ```
+
+  En PotAI → Ajustes: `http://127.0.0.1:8080` (PC), `http://10.0.2.2:8080`
+  (emulador Android) o `http://<IP-de-tu-PC>:8080` (teléfono en la misma WiFi).
+  Thing Name: `psi3542-g01`.

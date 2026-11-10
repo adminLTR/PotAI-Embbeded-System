@@ -40,11 +40,23 @@ tests/           testes unitários locais de QA
 professor/       provisionamento Console-first/CloudShell
 ```
 
+## API local de PotAI (sin AWS)
+
+Misma HTTP API que Lambda, con DynamoDB en memoria. No simula IoT Core.
+
+```text
+python local_server.py
+# o: docker compose up --build
+```
+
+Luego en PotAI → Ajustes: `http://127.0.0.1:8080` y Thing Name `psi3542-g01`.
+Detalle en `POTAI_BACKEND.md`.
+
 ## Validação local — somente desenvolvimento/QA
 
 ```text
 python -m py_compile lambda_ingest/lambda_function.py lambda_api/lambda_function.py
-pytest -q tests
+python -m unittest discover -s tests -v
 python qa/check_contracts.py
 node --check web_client/app.js
 ```

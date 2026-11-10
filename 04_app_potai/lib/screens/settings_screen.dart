@@ -85,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   autocorrect: false,
                   decoration: const InputDecoration(
                     labelText: 'URL de la API (ApiBaseUrl)',
-                    hintText: 'https://abc123.execute-api.sa-east-1.amazonaws.com',
+                    hintText: 'http://192.168.0.10:8080  o  https://….amazonaws.com',
                     prefixIcon: Icon(Icons.link_rounded),
                   ),
                 ),
@@ -137,10 +137,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 Text(
-                  '• URL de la API: en la consola de AWS, CloudFormation → tu stack → '
-                  'pestaña Salidas (Outputs) → ApiBaseUrl.\n'
-                  '• Nombre del dispositivo: el mismo "Thing Name" que configuraste '
-                  'en el menuconfig de la ESP32.',
+                  '• Sin AWS: arranca el servidor local (python local_server.py o '
+                  'docker compose up) y usa http://IP-DE-TU-PC:8080. En el emulador '
+                  'Android la IP es 10.0.2.2. El Thing Name de ejemplo es psi3542-g01.\n'
+                  '• Con AWS: CloudFormation → tu stack → Salidas → ApiBaseUrl, y el '
+                  'mismo Thing Name del menuconfig de la ESP32.',
                   style: text.bodyMedium?.copyWith(color: Colors.black54, height: 1.4),
                 ),
               ],
