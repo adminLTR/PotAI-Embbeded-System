@@ -129,35 +129,33 @@ menu "Riego automatico con IA (edge computing)"
             bool "Buzzer activo en nivel bajo"
             default n
 
-        config A10_LCD_I2C_SDA_GPIO
-            int "LCD I2C - SDA (GPIO)"
+        config A10_OLED_SDA_GPIO
+            int "OLED SSD1306 - SDA (GPIO)"
             range 0 33
             default 21
+            help
+                Pin SDA del modulo OLED I2C 128x64. El modulo se alimenta con 3.3 V.
 
-        config A10_LCD_I2C_SCL_GPIO
-            int "LCD I2C - SCL (GPIO)"
+        config A10_OLED_SCL_GPIO
+            int "OLED SSD1306 - SCL (GPIO)"
             range 0 33
             default 22
 
-        config A10_LCD_I2C_ADDR
-            hex "LCD I2C - direccion de 7 bits"
+        config A10_OLED_I2C_ADDR
+            hex "OLED SSD1306 - direccion I2C de 7 bits"
             range 0x08 0x77
-            default 0x27
+            default 0x3C
             help
-                0x27 (PCF8574) o 0x3F (PCF8574A). Si el LCD no responde, el log
-                muestra "nenhum dispositivo I2C" y el resto del firmware sigue.
+                Casi todos los modulos de 0.96 pulgadas usan 0x3C. Algunos usan 0x3D.
+                Si el OLED no responde, el log lo indica y el resto del firmware sigue.
 
-        config A10_LCD_I2C_FREQ_HZ
-            int "LCD I2C - frecuencia (Hz)"
-            range 10000 400000
-            default 100000
-
-        config A10_LCD_BACKLIGHT
-            bool "LCD con luz de fondo encendida"
-            default y
+        config A10_OLED_I2C_FREQ_HZ
+            int "OLED SSD1306 - frecuencia I2C (Hz)"
+            range 100000 400000
+            default 400000
 
         config A10_UI_BUTTON_GPIO
-            int "Boton de pagina del LCD (GPIO, entre pin y GND)"
+            int "Boton de pagina del OLED (GPIO, entre pin y GND)"
             range 0 33
             default 33
             help
@@ -281,12 +279,12 @@ menu "Riego automatico con IA (edge computing)"
     endmenu
 
     menu "Pantalla"
-        config A10_LCD_ENABLED
-            bool "Habilitar LCD 16x2 I2C y boton de paginas"
+        config A10_OLED_ENABLED
+            bool "Habilitar OLED SSD1306 128x64 y boton de paginas"
             default y
 
         config A10_UI_REFRESH_MS
-            int "Refresco del LCD (ms)"
+            int "Refresco del OLED (ms)"
             range 100 5000
             default 500
 

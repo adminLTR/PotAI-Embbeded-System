@@ -3,29 +3,29 @@
 #include <stdint.h>
 #include "device_state.h"
 #include "esp_err.h"
-#include "lcd_i2c.h"
+#include "oled_ssd1306.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    lcd_i2c_config_t lcd;
-    int button_gpio;           /* botao entre o GPIO e GND (pull-up interno) */
+    oled_config_t oled;
+    int button_gpio;           /* boton entre el GPIO y GND (pull-up interno) */
     uint32_t button_debounce_ms;
-    uint32_t refresh_ms;       /* periodo de atualizacao do LCD */
-    uint8_t plant_id;          /* so para exibir */
+    uint32_t refresh_ms;       /* periodo de actualizacion del OLED */
+    uint8_t plant_id;          /* solo para mostrar */
 } display_ui_config_t;
 
 #define DISPLAY_UI_PAGE_COUNT 3
 
 /*
- * Inicializa o LCD 16x2 e cria a task de interface. Cada pressao do botao avanca
- * para a pagina seguinte (circular):
- *   0: temperatura ambiente + umidade ambiente
- *   1: umidade do solo + planta
- *   2: ultima decisao da IA (ml) + estado da bomba
- * Se o LCD nao responder, retorna erro e o resto do firmware segue normalmente.
+ * Inicializa el OLED 128x64 y crea la task de interfaz. Cada pulsacion avanza
+ * a la pagina siguiente (circular):
+ *   0: temperatura ambiente + humedad ambiente
+ *   1: humedad del suelo + planta
+ *   2: ultima decision de la IA (ml) + estado de la bomba
+ * Si el OLED no responde, devuelve error y el resto del firmware sigue.
  */
 esp_err_t display_ui_start(const display_ui_config_t *config);
 

@@ -119,8 +119,8 @@ static void validate_gpio_configuration(void)
     const pin_use_t pins[]={
         {CONFIG_A10_DHT11_GPIO,true,"DHT11"},{CONFIG_A10_DOOR_GPIO,false,"DOOR"},{CONFIG_A10_LED_GPIO,true,"LED"},
         {CONFIG_A10_SOIL_ADC_GPIO,false,"SOIL_ADC"},{CONFIG_A10_PUMP_RELAY_GPIO,true,"PUMP_RELAY"},{CONFIG_A10_BUZZER_GPIO,true,"BUZZER"},
-#if CONFIG_A10_LCD_ENABLED
-        {CONFIG_A10_LCD_I2C_SDA_GPIO,true,"LCD_SDA"},{CONFIG_A10_LCD_I2C_SCL_GPIO,true,"LCD_SCL"},{CONFIG_A10_UI_BUTTON_GPIO,false,"UI_BUTTON"},
+#if CONFIG_A10_OLED_ENABLED
+        {CONFIG_A10_OLED_SDA_GPIO,true,"OLED_SDA"},{CONFIG_A10_OLED_SCL_GPIO,true,"OLED_SCL"},{CONFIG_A10_UI_BUTTON_GPIO,false,"UI_BUTTON"},
 #endif
     };
     const int n=(int)(sizeof(pins)/sizeof(pins[0]));
@@ -234,12 +234,6 @@ static void mqtt_task(void *arg)
 #else
 #define A10_BUZZER_ACTIVE_LOW false
 #endif
-#ifdef CONFIG_A10_LCD_BACKLIGHT
-#define A10_LCD_BACKLIGHT true
-#else
-#define A10_LCD_BACKLIGHT false
-#endif
-
 static void irrigation_event_cb(const char *event_name,void *ctx){(void)ctx;publish_item_t ev={.type=PUBLISH_ITEM_EVENT};strlcpy(ev.event_name,event_name,sizeof(ev.event_name));enqueue_publish_item(&ev);}
 
 /* Riego concluido -> fila propia (mas prioritaria que la telemetria). Si se llena, descarta el mas antiguo. */
@@ -261,18 +255,18 @@ static void init_irrigation_hardware(void)
     if(sret!=ESP_OK)ESP_LOGE(TAG,"[SOIL] init falhou (%s): sem umidade de solo, irrigacao bloqueada",esp_err_to_name(sret));
 }
 
-/* Modelo ML (borda), LCD + botao e task de irrigacao. Falhas aqui nao derrubam o firmware. */
+/* Modelo ML (borde), OLED + boton y task de riego. Un fallo aqui no tumba el firmware. */
 static void start_irrigation_and_ui(void)
 {
     esp_err_t mret=ml_model_init();
     if(mret!=ESP_OK)ESP_LOGE(TAG,"[ML] modelo invalido (%s): irrigacao automatica desabilitada. Rode 03_model_ML/export_model_esp32.py",esp_err_to_name(mret));
     ESP_LOGI(TAG,"[POTAI] plant_id=%u (1=ajo .. 8=tomatecherry)",(unsigned)CONFIG_A10_PLANT_ID);
-#if CONFIG_A10_LCD_ENABLED
+#if CONFIG_A10_OLED_ENABLED
     display_ui_config_t ui={
-        .lcd={.sda_gpio=CONFIG_A10_LCD_I2C_SDA_GPIO,.scl_gpio=CONFIG_A10_LCD_I2C_SCL_GPIO,.address=(uint8_t)CONFIG_A10_LCD_I2C_ADDR,.freq_hz=CONFIG_A10_LCD_I2C_FREQ_HZ,.backlight=A10_LCD_BACKLIGHT},
+        .oled={.sda_gpio=CONFIG_A10_OLED_SDA_GPIO,.scl_gpio=CONFIG_A10_OLED_SCL_GPIO,.address=(uint8_t)CONFIG_A10_OLED_I2C_ADDR,.freq_hz=CONFIG_A10_OLED_I2C_FREQ_HZ},
         .button_gpio=CONFIG_A10_UI_BUTTON_GPIO,.button_debounce_ms=CONFIG_A10_UI_BUTTON_DEBOUNCE_MS,.refresh_ms=CONFIG_A10_UI_REFRESH_MS,.plant_id=CONFIG_A10_PLANT_ID};
     esp_err_t uret=display_ui_start(&ui);
-    if(uret!=ESP_OK)ESP_LOGW(TAG,"[UI] LCD indisponivel (%s): firmware segue sem tela",esp_err_to_name(uret));
+    if(uret!=ESP_OK)ESP_LOGW(TAG,"[UI] OLED indisponible (%s): el firmware sigue sin pantalla",esp_err_to_name(uret));
 #endif
 #if CONFIG_A10_IRRIGATION_ENABLED
     if(mret==ESP_OK){

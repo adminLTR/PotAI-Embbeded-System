@@ -300,4 +300,10 @@ VALUES
 -- Verificar inserción
 SELECT id, common_name, scientific_name FROM species;
 
+
+machoc macho 7
+
+macho hembra
+
+hembra hembra
 """

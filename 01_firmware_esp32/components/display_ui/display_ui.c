@@ -70,7 +70,7 @@ static void render(uint8_t page, char cache[2][17], bool force)
 
     for (uint8_t row = 0; row < 2; row++) {
         if (force || strcmp(lines[row], cache[row]) != 0) {
-            if (lcd_i2c_write_line(row, lines[row]) == ESP_OK) {
+            if (oled_write_line(row, lines[row]) == ESP_OK) {
                 memcpy(cache[row], lines[row], 17);
             }
         }
@@ -134,7 +134,7 @@ esp_err_t display_ui_start(const display_ui_config_t *config)
         return err;
     }
 
-    err = lcd_i2c_init(&s_cfg.lcd);
+    err = oled_init(&s_cfg.oled);
     if (err != ESP_OK) {
         return err;
     }
@@ -143,6 +143,6 @@ esp_err_t display_ui_start(const display_ui_config_t *config)
         return ESP_ERR_NO_MEM;
     }
     s_started = true;
-    ESP_LOGI(TAG, "UI ativa: botao GPIO%d, %u paginas", s_cfg.button_gpio, DISPLAY_UI_PAGE_COUNT);
+    ESP_LOGI(TAG, "UI activa: boton GPIO%d, OLED 128x64, %u paginas", s_cfg.button_gpio, DISPLAY_UI_PAGE_COUNT);
     return ESP_OK;
 }
