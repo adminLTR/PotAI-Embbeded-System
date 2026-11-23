@@ -10,7 +10,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -150,6 +150,7 @@ def evaluate_model(
 
     y_pred = pipeline.predict(X_test)
     mae = mean_absolute_error(y_test, y_pred)
+    rmse = root_mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
     batch_ms = measure_batch_latency_ms(pipeline, X_test)
     per_sample_ms = measure_single_sample_latency_ms(pipeline, X_test.iloc[[0]])
@@ -158,6 +159,7 @@ def evaluate_model(
     metrics = {
         "model": name,
         "mae_ml": float(mae),
+        "rmse_ml": float(rmse),
         "r2": float(r2),
         "train_time_s": train_time_s,
         "batch_predict_ms": batch_ms,
@@ -185,7 +187,8 @@ def print_comparison(results: pd.DataFrame) -> None:
             index=False,
             formatters={
                 "mae_ml": "{:.4f}".format,
-                "r2": "{:.6f}".format,
+                "rmse_ml": "{:.4f}".format,
+                "r2_ml": "{:.6f}".format,
                 "train_time_s": "{:.4f}".format,
                 "batch_predict_ms": "{:.4f}".format,
                 "single_sample_ms": "{:.4f}".format,
@@ -196,6 +199,7 @@ def print_comparison(results: pd.DataFrame) -> None:
     )
 
     best_mae = results.loc[results["mae_ml"].idxmin(), "model"]
+    best_rmse = results.loc[results["rmse_ml"].idxmin(), "model"]
     best_r2 = _best_by_r2(results)
     fastest_infer = results.loc[results["single_sample_ms"].idxmin(), "model"]
     fastest_train = results.loc[results["train_time_s"].idxmin(), "model"]
