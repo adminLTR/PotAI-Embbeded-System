@@ -198,7 +198,28 @@ static void event_task(void *arg)
 
 static void command_task(void *arg)
 {
-    (void)arg;cloud_command_t command;while(1){if(xQueueReceive(s_command_queue,&command,portMAX_DELAY)!=pdTRUE)continue;if(command.type==CLOUD_COMMAND_LED_SET){bool on=command.data.led_set.on;ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_set_level((gpio_num_t)CONFIG_A10_LED_GPIO,on?1:0));device_state_update_led(on,now_ms());ESP_LOGI(TAG,"[CLOUD][COMMAND] led=%s",on?"ON":"OFF");}}
+    (void)arg;
+    cloud_command_t command;
+    while (1) {
+        if (xQueueReceive(s_command_queue, &command, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        if (command.type == CLOUD_COMMAND_LED_SET) {
+            bool on = command.data.led_set.on;
+            ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_set_level((gpio_num_t)CONFIG_A10_LED_GPIO, on ? 1 : 0));
+            device_state_update_led(on, now_ms());
+            ESP_LOGI(TAG, "[CLOUD][COMMAND] led=%s", on ? "ON" : "OFF");
+        } else if (command.type == CLOUD_COMMAND_IRRIGATE) {
+            esp_err_t err = irrigation_request_manual(command.data.irrigate.ml);
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "[CLOUD][COMMAND] riego manual %u ml rechazado: %s",
+                         (unsigned)command.data.irrigate.ml, esp_err_to_name(err));
+            } else {
+                ESP_LOGI(TAG, "[CLOUD][COMMAND] riego manual %u ml aceptado",
+                         (unsigned)command.data.irrigate.ml);
+            }
+        }
+    }
 }
 
 static void http_manager_task(void *arg)
@@ -269,16 +290,16 @@ static void start_irrigation_and_ui(void)
     if(uret!=ESP_OK)ESP_LOGW(TAG,"[UI] OLED indisponible (%s): el firmware sigue sin pantalla",esp_err_to_name(uret));
 #endif
 #if CONFIG_A10_IRRIGATION_ENABLED
-    if(mret==ESP_OK){
-        irrigation_config_t ir={.plant_id=CONFIG_A10_PLANT_ID,.check_period_ms=CONFIG_A10_IRRIGATION_CHECK_PERIOD_MS,.cooldown_s=CONFIG_A10_IRRIGATION_COOLDOWN_S,.min_ml=CONFIG_A10_IRRIGATION_MIN_ML,
-            .flow_ml_per_min=CONFIG_A10_PUMP_FLOW_ML_PER_MIN,.max_on_ms=CONFIG_A10_PUMP_MAX_ON_MS,.soil_max_pct=(float)CONFIG_A10_IRRIGATION_SOIL_MAX_PCT,
-            .max_sample_age_ms=3u*CONFIG_A10_SENSOR_PERIOD_MS+1000u,.beep_count=CONFIG_A10_PUMP_BEEP_COUNT,.event_cb=irrigation_event_cb,.event_ctx=NULL,.record_cb=irrigation_record_cb,.record_ctx=NULL};
-        esp_err_t iret=irrigation_start(&ir);
-        if(iret!=ESP_OK)ESP_LOGE(TAG,"[IRRIGATION] start falhou: %s",esp_err_to_name(iret));
-    }
+    const bool automatic=(mret==ESP_OK);
 #else
-    ESP_LOGW(TAG,"[IRRIGATION] riego automatico deshabilitado por menuconfig: bomba nunca sera acionada");
+    const bool automatic=false;
 #endif
+    irrigation_config_t ir={.plant_id=CONFIG_A10_PLANT_ID,.automatic=automatic,.check_period_ms=CONFIG_A10_IRRIGATION_CHECK_PERIOD_MS,.cooldown_s=CONFIG_A10_IRRIGATION_COOLDOWN_S,.min_ml=CONFIG_A10_IRRIGATION_MIN_ML,
+        .flow_ml_per_min=CONFIG_A10_PUMP_FLOW_ML_PER_MIN,.max_on_ms=CONFIG_A10_PUMP_MAX_ON_MS,.soil_max_pct=(float)CONFIG_A10_IRRIGATION_SOIL_MAX_PCT,
+        .max_sample_age_ms=3u*CONFIG_A10_SENSOR_PERIOD_MS+1000u,.beep_count=CONFIG_A10_PUMP_BEEP_COUNT,.event_cb=irrigation_event_cb,.event_ctx=NULL,.record_cb=irrigation_record_cb,.record_ctx=NULL};
+    esp_err_t iret=irrigation_start(&ir);
+    if(iret!=ESP_OK)ESP_LOGE(TAG,"[IRRIGATION] start falhou: %s",esp_err_to_name(iret));
+    else if(!automatic)ESP_LOGW(TAG,"[IRRIGATION] riego automatico apagado; el pedido manual de la app sigue activo");
 }
 
 static void create_task_or_abort(TaskFunction_t task,const char *name,uint32_t stack,UBaseType_t prio,TaskHandle_t *handle){if(xTaskCreate(task,name,stack,NULL,prio,handle)!=pdPASS){ESP_LOGE(TAG,"falha ao criar %s",name);ESP_ERROR_CHECK(ESP_ERR_NO_MEM);}}

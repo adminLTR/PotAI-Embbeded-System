@@ -22,6 +22,9 @@ abstract class PotaiApi {
 
   /// Riegos recientes, del mas nuevo al mas viejo.
   Future<List<IrrigationRecord>> irrigations({int limit = 30});
+
+  /// Pide un riego manual. La API lo publica en IoT y la ESP32 enciende la bomba.
+  Future<void> water({int ml = 120});
 }
 
 /// Habla con la HTTP API de AWS (API Gateway + Lambda).
@@ -39,29 +42,43 @@ class HttpPotaiApi implements PotaiApi {
 
   static const _timeout = Duration(seconds: 8);
 
-  Future<Map<String, dynamic>> _get(String path,
-      [Map<String, String>? query]) async {
-    final uri = Uri.parse('$baseUrl/devices/$thingName/$path')
-        .replace(queryParameters: query);
+  Future<Map<String, dynamic>> _send(
+    Future<http.Response> Function() call,
+    int okStatus,
+  ) async {
     final http.Response response;
     try {
-      response = await _client.get(uri).timeout(_timeout);
+      response = await call().timeout(_timeout);
     } on TimeoutException {
       throw ApiException('El servidor no respondió a tiempo.');
+    } on ApiException {
+      rethrow;
     } catch (_) {
       throw ApiException('No se pudo conectar. Revisa tu internet y la URL.');
     }
 
     Map<String, dynamic> body;
     try {
-      body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final raw = utf8.decode(response.bodyBytes);
+      final decoded = raw.isEmpty ? <String, dynamic>{} : jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('not an object');
+      }
+      body = decoded;
     } catch (_) {
       throw ApiException('Respuesta inesperada del servidor (${response.statusCode}).');
     }
-    if (response.statusCode != 200) {
+    if (response.statusCode != okStatus) {
       throw ApiException(_friendlyError(response.statusCode, body['error']));
     }
     return body;
+  }
+
+  Future<Map<String, dynamic>> _get(String path,
+      [Map<String, String>? query]) {
+    final uri = Uri.parse('$baseUrl/devices/$thingName/$path')
+        .replace(queryParameters: query);
+    return _send(() => _client.get(uri), 200);
   }
 
   String _friendlyError(int status, Object? code) {
@@ -72,6 +89,8 @@ class HttpPotaiApi implements PotaiApi {
         return 'Aún no hay datos de este dispositivo.';
       case 'internal_error':
         return 'Error interno del servidor. Intenta de nuevo.';
+      case 'invalid_command':
+        return 'El servidor no aceptó el pedido de riego.';
     }
     return 'Error del servidor (HTTP $status).';
   }
@@ -94,6 +113,19 @@ class HttpPotaiApi implements PotaiApi {
     return (body['items'] as List)
         .map((e) => IrrigationRecord.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  @override
+  Future<void> water({int ml = 120}) async {
+    final uri = Uri.parse('$baseUrl/devices/$thingName/command');
+    await _send(
+      () => _client.post(
+        uri,
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode({'irrigate_ml': ml}),
+      ),
+      202,
+    );
   }
 }
 
@@ -185,4 +217,7 @@ class DemoPotaiApi implements PotaiApi {
       );
     });
   }
+
+  @override
+  Future<void> water({int ml = 120}) async {}
 }

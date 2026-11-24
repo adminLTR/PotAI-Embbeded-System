@@ -1,14 +1,21 @@
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "esp_err.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef enum { CLOUD_COMMAND_LED_SET = 0 } cloud_command_type_t;
+typedef enum {
+    CLOUD_COMMAND_LED_SET = 0,
+    CLOUD_COMMAND_IRRIGATE = 1,
+} cloud_command_type_t;
 typedef struct {
     cloud_command_type_t type;
-    union { struct { bool on; } led_set; } data;
+    union {
+        struct { bool on; } led_set;
+        struct { uint16_t ml; } irrigate;
+    } data;
 } cloud_command_t;
 esp_err_t cloud_command_decode(const char *expected_topic,
                                const char *topic, size_t topic_len,

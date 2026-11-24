@@ -10,6 +10,15 @@ import '../widgets.dart';
 const soilDryBelow = 30.0;
 const soilWetAbove = 65.0;
 
+/// Dosis del botón. La API acepta 10..500 ml; 120 es el riego medio del modelo.
+const manualWaterMl = 120;
+
+Future<void> askWater(BuildContext context, PotaiController controller) async {
+  final message = await controller.requestWater(ml: manualWaterMl);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
 ({String label, Color color}) soilState(double? pct) {
   if (pct == null) return (label: 'Sin lectura del suelo', color: Colors.grey);
   if (pct < soilDryBelow) return (label: 'Suelo seco', color: potaiRed);
@@ -54,6 +63,12 @@ class HomeScreen extends StatelessWidget {
             children: [
               if (controller.error != null) _Banner(text: controller.error!),
               _PlantHeader(dashboard: dash),
+              const SizedBox(height: 12),
+              _WaterButton(
+                busy: controller.watering,
+                pumpOn: dash.latest?.pumpOn ?? false,
+                onPressed: () => askWater(context, controller),
+              ),
               const SizedBox(height: 16),
               if (dash.latest == null)
                 const _WaitingForData()
@@ -143,6 +158,51 @@ class _PlantHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _WaterButton extends StatelessWidget {
+  const _WaterButton({
+    required this.busy,
+    required this.pumpOn,
+    required this.onPressed,
+  });
+
+  final bool busy;
+  final bool pumpOn;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final enabled = !busy && !pumpOn;
+    final label = busy
+        ? 'Enviando pedido...'
+        : pumpOn
+            ? 'La bomba está regando'
+            : 'Regar ahora';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          onPressed: enabled ? onPressed : null,
+          icon: busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.water_drop_rounded),
+          label: Text(label),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Pide $manualWaterMl ml a la maceta, aunque la IA no recomiende riego.',
+          textAlign: TextAlign.center,
+          style: text.bodySmall?.copyWith(color: Colors.black45),
+        ),
+      ],
     );
   }
 }

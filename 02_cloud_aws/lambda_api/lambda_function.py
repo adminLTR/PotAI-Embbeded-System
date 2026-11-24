@@ -7,7 +7,7 @@ Es el "puente" entre lo que el ESP32 guardo en DynamoDB y la aplicacion:
   GET  /devices/{thingName}/telemetry/latest      ultima lectura (contrato original A11)
   GET  /devices/{thingName}/telemetry/history     lecturas recientes (?limit=1..200)
   GET  /devices/{thingName}/irrigations           riegos recientes (?limit=1..100)
-  POST /devices/{thingName}/command               {"led": true|false} (contrato original A11)
+  POST /devices/{thingName}/command               {"led": true|false} o {"irrigate_ml": 10..500}
 """
 
 import base64
@@ -236,26 +236,54 @@ def parse_json_body(event):
     return json.loads(raw)
 
 
+# Mismos limites que cloud_command.c y irrigation_request_manual().
+MANUAL_ML_MIN = 10
+MANUAL_ML_MAX = 500
+
+
+def _manual_ml(value):
+    """Entero de ml, o None si el valor no es un riego manual valido."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    ml = int(value)
+    if ml < MANUAL_ML_MIN or ml > MANUAL_ML_MAX:
+        return None
+    return ml
+
+
+def _invalid_command():
+    return response(
+        400,
+        {
+            "error": "invalid_command",
+            "expected": {"led": "boolean", "irrigate_ml": "integer 10..500"},
+        },
+    )
+
+
 def post_command(thing_name, event):
     try:
         body = parse_json_body(event)
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
         return response(400, {"error": "invalid_json"})
 
-    if (
-        not isinstance(body, dict)
-        or set(body.keys()) != {"led"}
-        or type(body["led"]) is not bool
-    ):
-        return response(
-            400,
-            {"error": "invalid_command", "expected": {"led": "boolean"}},
-        )
+    if not isinstance(body, dict):
+        return _invalid_command()
 
-    payload = json.dumps(
-        {"led": body["led"]},
-        separators=(",", ":"),
-    ).encode("utf-8")
+    command = None
+    if set(body.keys()) == {"led"} and type(body["led"]) is bool:
+        command = {"led": body["led"]}
+    elif set(body.keys()) == {"irrigate_ml"}:
+        ml = _manual_ml(body["irrigate_ml"])
+        if ml is not None:
+            command = {"irrigate_ml": ml}
+
+    if command is None:
+        return _invalid_command()
+
+    payload = json.dumps(command, separators=(",", ":")).encode("utf-8")
     topic = f"psi3542/{thing_name}/command"
 
     _resources()["iot"].publish(
@@ -268,7 +296,7 @@ def post_command(thing_name, event):
     print(
         "COMMAND_ACCEPTED "
         f"thingName={thing_name} "
-        f"led={body['led']} "
+        f"command={command} "
         f"topic={topic}"
     )
 
@@ -277,7 +305,7 @@ def post_command(thing_name, event):
         {
             "accepted": True,
             "thingName": thing_name,
-            "command": {"led": body["led"]},
+            "command": command,
         },
     )
 

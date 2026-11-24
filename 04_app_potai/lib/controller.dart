@@ -85,6 +85,7 @@ class PotaiController extends ChangeNotifier {
   List<IrrigationRecord> irrigations = const [];
   String? error;
   bool loading = false;
+  bool watering = false;
   DateTime? lastRefresh;
 
   Timer? _timer;
@@ -123,6 +124,31 @@ class PotaiController extends ChangeNotifier {
     } finally {
       _busy = false;
       loading = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Publica un riego manual en AWS. Devuelve el texto para mostrar al usuario.
+  Future<String> requestWater({int ml = 120}) async {
+    if (!settings.isConfigured) return 'Conecta el dispositivo antes de regar.';
+    if (watering) return 'Ya hay un pedido de riego en curso.';
+    watering = true;
+    notifyListeners();
+    try {
+      await _apiFactory(settings).water(ml: ml);
+      if (settings.demo) {
+        return 'Modo de ejemplo: el pedido de $ml ml se simuló.';
+      }
+      if (dashboard?.online == false) {
+        return 'Pedido enviado ($ml ml). El dispositivo aparece sin conexión y puede no regar.';
+      }
+      return 'Pedido enviado. La maceta regará $ml ml en unos segundos.';
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'No se pudo enviar el riego.';
+    } finally {
+      watering = false;
       if (!_disposed) notifyListeners();
     }
   }

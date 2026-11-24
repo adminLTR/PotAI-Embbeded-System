@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
 #include "ml_model.h"
 #include "pump.h"
@@ -14,6 +15,12 @@ static const char *TAG = "IRRIGATION";
 
 static irrigation_config_t s_cfg;
 static bool s_started;
+static TaskHandle_t s_task;
+static QueueHandle_t s_manual_queue;
+
+/* Igual que la API: un pedido manual trae entre 10 y 500 ml. */
+#define MANUAL_ML_MIN 10u
+#define MANUAL_ML_MAX 500u
 
 static uint64_t now_ms(void)
 {
@@ -89,16 +96,63 @@ static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t coun
     return delivered;
 }
 
+static void run_manual(uint16_t ml, uint32_t *count, uint64_t *last_end_ms, bool *had_irrigation)
+{
+    device_snapshot_t snap;
+    device_state_copy(&snap);
+    const uint32_t duration_ms = irrigation_duration_ms((float)ml, s_cfg.flow_ml_per_min, s_cfg.max_on_ms);
+    if (duration_ms == 0) {
+        ESP_LOGW(TAG, "[IA] riego manual %u ml sin duracion", (unsigned)ml);
+        return;
+    }
+
+    const float soil = snap.soil_valid ? snap.soil_moisture_pct : 0.0f;
+    const float temp = snap.sample_valid ? snap.temperature_c : 0.0f;
+    ESP_LOGI(TAG, "[IA] riego manual: %u ml (ignora IA, suelo y cooldown)", (unsigned)ml);
+    (*count)++;
+    water_plant((float)ml, duration_ms, *count, soil, temp);
+    *last_end_ms = now_ms();
+    *had_irrigation = true;
+}
+
+static TickType_t ticks_until(TickType_t deadline)
+{
+    const int32_t left = (int32_t)(deadline - xTaskGetTickCount());
+    return (left > 0) ? (TickType_t)left : 0;
+}
+
 static void irrigation_task(void *arg)
 {
     (void)arg;
     uint32_t count = 0;
     uint64_t last_end_ms = 0;
     bool had_irrigation = false;
-    TickType_t last_wake = xTaskGetTickCount();
+    const TickType_t period = pdMS_TO_TICKS(s_cfg.check_period_ms);
+    TickType_t next_auto = xTaskGetTickCount() + period;
 
     while (1) {
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(s_cfg.check_period_ms));
+        const TickType_t wait = s_cfg.automatic ? ticks_until(next_auto) : portMAX_DELAY;
+        ulTaskNotifyTake(pdTRUE, wait);
+
+        uint16_t manual_ml = 0;
+        const bool did_manual = xQueueReceive(s_manual_queue, &manual_ml, 0) == pdTRUE;
+        if (did_manual) {
+            run_manual(manual_ml, &count, &last_end_ms, &had_irrigation);
+        }
+
+        if (!s_cfg.automatic) {
+            continue;
+        }
+        if ((int32_t)(xTaskGetTickCount() - next_auto) < 0) {
+            continue;
+        }
+        next_auto += period;
+        if ((int32_t)(xTaskGetTickCount() - next_auto) >= 0) {
+            next_auto = xTaskGetTickCount() + period;
+        }
+        if (did_manual) {
+            continue;
+        }
 
         device_snapshot_t snap;
         device_state_copy(&snap);
@@ -156,18 +210,41 @@ esp_err_t irrigation_start(const irrigation_config_t *config)
     if (s_started) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (!ml_model_is_ready()) {
+    if (config->automatic && !ml_model_is_ready()) {
         ESP_LOGE(TAG, "modelo ML nao esta pronto: irrigacao automatica desabilitada");
         return ESP_ERR_INVALID_STATE;
     }
     s_cfg = *config;
+    s_manual_queue = xQueueCreate(1, sizeof(uint16_t));
+    if (s_manual_queue == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
 
-    if (xTaskCreatePinnedToCore(irrigation_task, "irrigation_task", 4096, NULL, 4, NULL, 1) != pdPASS) {
+    if (xTaskCreatePinnedToCore(irrigation_task, "irrigation_task", 4096, NULL, 4, &s_task, 1) != pdPASS) {
+        vQueueDelete(s_manual_queue);
+        s_manual_queue = NULL;
+        s_task = NULL;
         return ESP_ERR_NO_MEM;
     }
     s_started = true;
-    ESP_LOGI(TAG, "ativo: planta=%u periodo=%lu ms cooldown=%lu s vazao=%lu ml/min max_on=%lu ms",
-             s_cfg.plant_id, (unsigned long)s_cfg.check_period_ms, (unsigned long)s_cfg.cooldown_s,
-             (unsigned long)s_cfg.flow_ml_per_min, (unsigned long)s_cfg.max_on_ms);
+    ESP_LOGI(TAG, "ativo: planta=%u automatico=%d periodo=%lu ms cooldown=%lu s vazao=%lu ml/min max_on=%lu ms",
+             s_cfg.plant_id, s_cfg.automatic ? 1 : 0, (unsigned long)s_cfg.check_period_ms,
+             (unsigned long)s_cfg.cooldown_s, (unsigned long)s_cfg.flow_ml_per_min, (unsigned long)s_cfg.max_on_ms);
+    return ESP_OK;
+}
+
+esp_err_t irrigation_request_manual(uint16_t ml)
+{
+    if (!s_started || s_task == NULL || s_manual_queue == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (ml < MANUAL_ML_MIN || ml > MANUAL_ML_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    /* Un solo pedido pendiente: el mas nuevo reemplaza al anterior. */
+    if (xQueueOverwrite(s_manual_queue, &ml) != pdPASS) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xTaskNotifyGive(s_task);
     return ESP_OK;
 }

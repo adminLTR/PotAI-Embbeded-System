@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
 
@@ -25,8 +26,9 @@ typedef void (*irrigation_record_cb_t)(const irrigation_record_t *record, void *
 
 typedef struct {
     uint8_t plant_id;             /* 1..8: entrada "localname" do modelo */
+    bool automatic;               /* false: no riega sola; el pedido manual sigue activo */
     uint32_t check_period_ms;     /* periodo de decisao da IA */
-    uint32_t cooldown_s;          /* minimo entre duas irrigacoes (o solo demora a absorver) */
+    uint32_t cooldown_s;          /* 0 = el siguiente ciclo de la IA puede regar otra vez */
     uint32_t min_ml;              /* abaixo disso nao liga a bomba */
     uint32_t flow_ml_per_min;     /* vazao medida da bomba */
     uint32_t max_on_ms;           /* limite duro de uma irrigacao */
@@ -39,8 +41,15 @@ typedef struct {
     void *record_ctx;
 } irrigation_config_t;
 
-/* Cria a task de irrigacao automatica. Requer ml_model_init() e pump_init() previos. */
+/* Cria a task de irrigacao. Se automatic=true, requer ml_model_init() previo. pump_init() sempre. */
 esp_err_t irrigation_start(const irrigation_config_t *config);
+
+/*
+ * Pide un riego ya, sin las trabas de la IA (suelo, volumen minimo, cooldown).
+ * La duracion sigue limitada por max_on_ms. ml debe estar entre 10 y 500.
+ * Despierta la task; no bloquea hasta que la bomba termine.
+ */
+esp_err_t irrigation_request_manual(uint16_t ml);
 
 /* Duracao da bomba para entregar `ml` (limitada por max_on_ms). Funcao pura. */
 uint32_t irrigation_duration_ms(float ml, uint32_t flow_ml_per_min, uint32_t max_on_ms);

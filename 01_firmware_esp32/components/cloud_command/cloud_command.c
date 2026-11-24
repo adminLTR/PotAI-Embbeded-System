@@ -34,14 +34,34 @@ esp_err_t cloud_command_decode(const char *expected_topic,
         ESP_LOGW(TAG, "[COMMAND] rejected: malformed JSON");
         return ESP_ERR_INVALID_ARG;
     }
-    cJSON *led = cJSON_GetObjectItemCaseSensitive(root, "led");
-    if (!cJSON_IsBool(led) || cJSON_GetArraySize(root) != 1) {
+    if (cJSON_GetArraySize(root) != 1) {
         cJSON_Delete(root);
-        ESP_LOGW(TAG, "[COMMAND] rejected: expected exactly one boolean field 'led'");
+        ESP_LOGW(TAG, "[COMMAND] rejected: expected exactly one of 'led' or 'irrigate_ml'");
         return ESP_ERR_INVALID_ARG;
     }
-    out->type = CLOUD_COMMAND_LED_SET;
-    out->data.led_set.on = cJSON_IsTrue(led);
+
+    cJSON *led = cJSON_GetObjectItemCaseSensitive(root, "led");
+    if (cJSON_IsBool(led)) {
+        out->type = CLOUD_COMMAND_LED_SET;
+        out->data.led_set.on = cJSON_IsTrue(led);
+        cJSON_Delete(root);
+        return ESP_OK;
+    }
+
+    cJSON *ml = cJSON_GetObjectItemCaseSensitive(root, "irrigate_ml");
+    if (cJSON_IsNumber(ml)) {
+        const double value = ml->valuedouble;
+        const int whole = (int)value;
+        /* Mismo rango que la API: 10..500 ml, entero. La duracion la corta max_on_ms. */
+        if (value >= 10.0 && value <= 500.0 && value == (double)whole) {
+            out->type = CLOUD_COMMAND_IRRIGATE;
+            out->data.irrigate.ml = (uint16_t)whole;
+            cJSON_Delete(root);
+            return ESP_OK;
+        }
+    }
+
     cJSON_Delete(root);
-    return ESP_OK;
+    ESP_LOGW(TAG, "[COMMAND] rejected: expected {\"led\":bool} or {\"irrigate_ml\":10..500}");
+    return ESP_ERR_INVALID_ARG;
 }

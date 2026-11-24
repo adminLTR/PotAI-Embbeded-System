@@ -288,6 +288,22 @@ class ApiTests(BackendCase):
         self.assertEqual(self.call("POST /devices/{thingName}/command", body={"led": "x"})[0], 400)
         self.assertEqual(self.call("POST /devices/{thingName}/command", body="{no json")[0], 400)
 
+    def test_manual_irrigation_command(self):
+        status, body = self.call("POST /devices/{thingName}/command", body={"irrigate_ml": 120})
+        self.assertEqual((status, body["accepted"]), (202, True))
+        self.assertEqual(body["command"], {"irrigate_ml": 120})
+        self.assertEqual(self.iot.published[0]["topic"], "psi3542/psi3542-g01/command")
+        self.assertEqual(self.iot.published[0]["payload"], b'{"irrigate_ml":120}')
+        self.assertEqual(self.iot.published[0]["qos"], 1)
+        for rejected in (
+            {"irrigate_ml": 9},
+            {"irrigate_ml": 501},
+            {"irrigate_ml": 120.5},
+            {"irrigate_ml": True},
+            {"led": True, "irrigate_ml": 120},
+        ):
+            self.assertEqual(self.call("POST /devices/{thingName}/command", body=rejected)[0], 400)
+
     def test_invalid_thing_and_unknown_route(self):
         self.assertEqual(self.call("GET /devices/{thingName}/dashboard", thing="otro")[0], 400)
         self.assertEqual(self.call("GET /devices/{thingName}/nada")[0], 404)

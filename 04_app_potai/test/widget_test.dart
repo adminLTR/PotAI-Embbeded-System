@@ -67,11 +67,20 @@ class FakeApi implements PotaiApi {
   @override
   Future<List<HistoryPoint>> history({int limit = 100}) async => [];
 
+  int waterCalls = 0;
+  int? lastMl;
+
   @override
   Future<List<IrrigationRecord>> irrigations({int limit = 30}) async => [
         IrrigationRecord.fromJson(
             (json['irrigation'] as Map<String, dynamic>)['last'] as Map<String, dynamic>),
       ];
+
+  @override
+  Future<void> water({int ml = 120}) async {
+    waterCalls++;
+    lastMl = ml;
+  }
 }
 
 Future<PotaiController> makeController({
@@ -122,6 +131,33 @@ void main() {
     expect(find.text('58 %'), findsOneWidget);
     expect(find.text('120'), findsOneWidget);
     expect(find.text('Regando ahora'), findsOneWidget);
+    expect(find.text('La bomba está regando'), findsOneWidget);
+    controller.dispose();
+  });
+
+  testWidgets('el boton de regar envia 120 ml', (tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final api = FakeApi(dashboardJson());
+    final controller = await makeController(
+      prefs: {
+        'potai.apiBaseUrl': 'https://api.example.com',
+        'potai.thingName': 'psi3542-g01',
+      },
+      factory: (_) => api,
+    );
+    await tester.pumpWidget(PotaiApp(controller: controller));
+    await controller.refresh();
+    await tester.pump();
+
+    await tester.tap(find.text('Regar ahora'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.waterCalls, 1);
+    expect(api.lastMl, 120);
+    expect(find.text('Pedido enviado. La maceta regará 120 ml en unos segundos.'), findsOneWidget);
     controller.dispose();
   });
 
@@ -154,6 +190,24 @@ void main() {
     expect(dash.plant!.displayName, 'Menta');
     expect(dash.latest!.soilMoisturePct, 27.5);
     expect(dash.irrigation.ml24h, 218.5);
+  });
+
+  test('HttpPotaiApi publica el riego manual', () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response(jsonEncode({'accepted': true, 'command': {'irrigate_ml': 120}}), 202);
+    });
+    final api = HttpPotaiApi(
+      baseUrl: 'https://api.example.com/',
+      thingName: 'psi3542-g01',
+      client: client,
+    );
+
+    await api.water(ml: 120);
+    expect(captured.method, 'POST');
+    expect(captured.url.toString(), 'https://api.example.com/devices/psi3542-g01/command');
+    expect(jsonDecode(captured.body), {'irrigate_ml': 120});
   });
 
   test('HttpPotaiApi traduce los errores a mensajes amigables', () async {

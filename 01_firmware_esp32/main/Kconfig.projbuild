@@ -241,10 +241,12 @@ menu "Riego automatico con IA (edge computing)"
         config A10_IRRIGATION_COOLDOWN_S
             int "Tiempo minimo entre dos riegos (s)"
             range 0 86400
-            default 600
+            default 0
             help
-                El suelo tarda en absorber el agua; evita regar de nuevo antes de
-                que el sensor refleje el cambio.
+                0 = sin espera: si el modelo vuelve a pedir agua en el siguiente
+                ciclo (cada A10_IRRIGATION_CHECK_PERIOD_MS), la bomba puede
+                encenderse otra vez. Sube este valor solo si quieres un pausa
+                fija entre riegos.
 
         config A10_IRRIGATION_MIN_ML
             int "Volumen minimo para encender la bomba (ml)"
