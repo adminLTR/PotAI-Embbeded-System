@@ -28,6 +28,9 @@ typedef struct {
     bool soil_valid;
     uint64_t soil_sample_uptime_ms;
 
+    /* Modo test: los valores no vienen de los sensores. */
+    bool test_mode;
+
     /* Irrigacao automatica (decisao da IA na borda). */
     bool pump_on;
     float last_ml_predicted;
@@ -76,6 +79,20 @@ void device_state_update_irrigation(
     uint64_t update_uptime_ms);
 
 void device_state_copy(device_snapshot_t *out);
+
+/* enabled=false vuelve a los sensores. enabled=true sustituye T, humedad y suelo. */
+void device_state_set_test_mode(
+    bool enabled,
+    float temperature_c,
+    float humidity_pct,
+    float soil_moisture_pct,
+    uint64_t now_ms);
+
+/* Renueva la edad de la muestra simulada. Devuelve false si el modo test está apagado. */
+bool device_state_test_touch(uint64_t now_ms);
+
+/* Sube la humedad del suelo simulada tras un riego. No hace nada fuera del modo test. */
+bool device_state_test_bump_soil(float delta_pct, uint64_t now_ms, float *out_soil);
 
 #ifdef __cplusplus
 }

@@ -5,6 +5,7 @@ import 'controller.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/tests_screen.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -61,8 +62,9 @@ class _HomeShellState extends State<HomeShell> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomeScreen(controller: c, onOpenSettings: () => _go(2)),
+          HomeScreen(controller: c, onOpenSettings: () => _go(3)),
           HistoryScreen(controller: c),
+          TestsScreen(controller: c),
           SettingsScreen(controller: c, onConnected: () => _go(0)),
         ],
       ),
@@ -79,6 +81,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.show_chart_rounded),
             selectedIcon: Icon(Icons.show_chart_rounded),
             label: 'Historial',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.science_outlined),
+            selectedIcon: Icon(Icons.science_rounded),
+            label: 'Tests',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

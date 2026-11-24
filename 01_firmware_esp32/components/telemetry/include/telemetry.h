@@ -17,6 +17,7 @@ typedef struct {
     float ml_predicted;
     bool pump_on;
     uint32_t irrigation_count;
+    bool test_mode;
 } telemetry_data_t;
 esp_err_t telemetry_encode_json(const telemetry_data_t *data, char *buffer, size_t buffer_len);
 

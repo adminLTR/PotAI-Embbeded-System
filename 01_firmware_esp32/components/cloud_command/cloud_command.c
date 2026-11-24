@@ -34,9 +34,40 @@ esp_err_t cloud_command_decode(const char *expected_topic,
         ESP_LOGW(TAG, "[COMMAND] rejected: malformed JSON");
         return ESP_ERR_INVALID_ARG;
     }
+    cJSON *test_on = cJSON_GetObjectItemCaseSensitive(root, "test_on");
+    if (cJSON_IsBool(test_on)) {
+        const int nkeys = cJSON_GetArraySize(root);
+        if (!cJSON_IsTrue(test_on) && nkeys == 1) {
+            out->type = CLOUD_COMMAND_TEST;
+            out->data.test_sensors.on = false;
+            cJSON_Delete(root);
+            return ESP_OK;
+        }
+        cJSON *temp = cJSON_GetObjectItemCaseSensitive(root, "temperature_c");
+        cJSON *hum = cJSON_GetObjectItemCaseSensitive(root, "humidity_pct");
+        cJSON *soil = cJSON_GetObjectItemCaseSensitive(root, "soil_moisture_pct");
+        if (cJSON_IsTrue(test_on) && nkeys == 4 && cJSON_IsNumber(temp) && cJSON_IsNumber(hum) && cJSON_IsNumber(soil)) {
+            const double t = temp->valuedouble;
+            const double h = hum->valuedouble;
+            const double s = soil->valuedouble;
+            if (t >= -10.0 && t <= 60.0 && h >= 0.0 && h <= 100.0 && s >= 0.0 && s <= 100.0) {
+                out->type = CLOUD_COMMAND_TEST;
+                out->data.test_sensors.on = true;
+                out->data.test_sensors.temperature_c = (float)t;
+                out->data.test_sensors.humidity_pct = (float)h;
+                out->data.test_sensors.soil_moisture_pct = (float)s;
+                cJSON_Delete(root);
+                return ESP_OK;
+            }
+        }
+        cJSON_Delete(root);
+        ESP_LOGW(TAG, "[COMMAND] rejected: test_on true needs temperature_c, humidity_pct, soil_moisture_pct");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     if (cJSON_GetArraySize(root) != 1) {
         cJSON_Delete(root);
-        ESP_LOGW(TAG, "[COMMAND] rejected: expected exactly one of 'led' or 'irrigate_ml'");
+        ESP_LOGW(TAG, "[COMMAND] rejected: expected led, irrigate_ml or test_on");
         return ESP_ERR_INVALID_ARG;
     }
 

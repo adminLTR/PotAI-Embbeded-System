@@ -128,3 +128,74 @@ void device_state_copy(device_snapshot_t *out)
     *out = s_snapshot;
     unlock();
 }
+
+static float clampf(float value, float lo, float hi)
+{
+    if (value < lo) {
+        return lo;
+    }
+    if (value > hi) {
+        return hi;
+    }
+    return value;
+}
+
+void device_state_set_test_mode(
+    bool enabled,
+    float temperature_c,
+    float humidity_pct,
+    float soil_moisture_pct,
+    uint64_t now_ms)
+{
+    temperature_c = clampf(temperature_c, -10.0f, 60.0f);
+    humidity_pct = clampf(humidity_pct, 0.0f, 100.0f);
+    soil_moisture_pct = clampf(soil_moisture_pct, 0.0f, 100.0f);
+
+    lock();
+    s_snapshot.test_mode = enabled;
+    if (enabled) {
+        s_snapshot.temperature_c = temperature_c;
+        s_snapshot.humidity_pct = humidity_pct;
+        s_snapshot.sample_valid = true;
+        s_snapshot.sample_uptime_ms = now_ms;
+        s_snapshot.soil_moisture_pct = soil_moisture_pct;
+        s_snapshot.soil_raw = 0;
+        s_snapshot.soil_valid = true;
+        s_snapshot.soil_sample_uptime_ms = now_ms;
+    }
+    s_snapshot.last_update_uptime_ms = now_ms;
+    unlock();
+}
+
+bool device_state_test_touch(uint64_t now_ms)
+{
+    lock();
+    const bool on = s_snapshot.test_mode;
+    if (on) {
+        s_snapshot.sample_valid = true;
+        s_snapshot.soil_valid = true;
+        s_snapshot.sample_uptime_ms = now_ms;
+        s_snapshot.soil_sample_uptime_ms = now_ms;
+        s_snapshot.last_update_uptime_ms = now_ms;
+    }
+    unlock();
+    return on;
+}
+
+bool device_state_test_bump_soil(float delta_pct, uint64_t now_ms, float *out_soil)
+{
+    lock();
+    if (!s_snapshot.test_mode) {
+        unlock();
+        return false;
+    }
+    s_snapshot.soil_moisture_pct = clampf(s_snapshot.soil_moisture_pct + delta_pct, 0.0f, 100.0f);
+    s_snapshot.soil_valid = true;
+    s_snapshot.soil_sample_uptime_ms = now_ms;
+    s_snapshot.last_update_uptime_ms = now_ms;
+    if (out_soil != NULL) {
+        *out_soil = s_snapshot.soil_moisture_pct;
+    }
+    unlock();
+    return true;
+}

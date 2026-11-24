@@ -119,6 +119,7 @@ def latest_view(item, current_ms):
         "ml_predicted": _optional(item, "ml_predicted"),
         "pump_on": bool(item.get("pump_on", False)),
         "irrigation_count": _optional(item, "irrigation_count"),
+        "test_mode": bool(item.get("test_mode", False)),
     }
 
 
@@ -253,12 +254,47 @@ def _manual_ml(value):
     return ml
 
 
+def _bounded_number(value, lo, hi):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value < lo or value > hi:
+        return None
+    return round(float(value), 1)
+
+
+def _test_command(body):
+    """None si no es un comando de modo test. {} vacio no: devuelve el payload o None."""
+    if "test_on" not in body or type(body["test_on"]) is not bool:
+        return None
+    if body["test_on"] is False:
+        if set(body.keys()) != {"test_on"}:
+            return None
+        return {"test_on": False}
+    if set(body.keys()) != {"test_on", "temperature_c", "humidity_pct", "soil_moisture_pct"}:
+        return None
+    temperature = _bounded_number(body["temperature_c"], -10, 60)
+    humidity = _bounded_number(body["humidity_pct"], 0, 100)
+    soil = _bounded_number(body["soil_moisture_pct"], 0, 100)
+    if temperature is None or humidity is None or soil is None:
+        return None
+    return {
+        "test_on": True,
+        "temperature_c": temperature,
+        "humidity_pct": humidity,
+        "soil_moisture_pct": soil,
+    }
+
+
 def _invalid_command():
     return response(
         400,
         {
             "error": "invalid_command",
-            "expected": {"led": "boolean", "irrigate_ml": "integer 10..500"},
+            "expected": {
+                "led": "boolean",
+                "irrigate_ml": "integer 10..500",
+                "test_on": "boolean, with temperature_c, humidity_pct and soil_moisture_pct when true",
+            },
         },
     )
 
@@ -279,6 +315,8 @@ def post_command(thing_name, event):
         ml = _manual_ml(body["irrigate_ml"])
         if ml is not None:
             command = {"irrigate_ml": ml}
+    elif "test_on" in body:
+        command = _test_command(body)
 
     if command is None:
         return _invalid_command()

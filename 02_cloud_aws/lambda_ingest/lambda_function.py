@@ -118,6 +118,8 @@ def build_telemetry_item(event):
         item["pump_on"] = _bool_field(event, "pump_on")
     if "irrigation_count" in event:
         item["irrigation_count"] = _integer_field(event, "irrigation_count")
+    if "test_mode" in event:
+        item["test_mode"] = _bool_field(event, "test_mode")
 
     item["expires_at"] = item["ingested_at_ms"] // 1000 + TELEMETRY_TTL_S
     return item

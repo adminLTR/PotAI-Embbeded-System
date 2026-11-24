@@ -81,6 +81,20 @@ class FakeApi implements PotaiApi {
     waterCalls++;
     lastMl = ml;
   }
+
+  bool? testEnabled;
+  double? testSoil;
+
+  @override
+  Future<void> setTestSensors({
+    required bool enabled,
+    required double temperatureC,
+    required double humidityPct,
+    required double soilMoisturePct,
+  }) async {
+    testEnabled = enabled;
+    testSoil = soilMoisturePct;
+  }
 }
 
 Future<PotaiController> makeController({
@@ -208,6 +222,25 @@ void main() {
     expect(captured.method, 'POST');
     expect(captured.url.toString(), 'https://api.example.com/devices/psi3542-g01/command');
     expect(jsonDecode(captured.body), {'irrigate_ml': 120});
+  });
+
+  test('HttpPotaiApi publica el modo test', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final client = MockClient((request) async {
+      bodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+      return http.Response(jsonEncode({'accepted': true}), 202);
+    });
+    final api = HttpPotaiApi(
+      baseUrl: 'https://api.example.com',
+      thingName: 'psi3542-g01',
+      client: client,
+    );
+
+    await api.setTestSensors(enabled: true, temperatureC: 31, humidityPct: 55, soilMoisturePct: 18);
+    await api.setTestSensors(enabled: false, temperatureC: 31, humidityPct: 55, soilMoisturePct: 18);
+    expect(bodies[0]['test_on'], isTrue);
+    expect(bodies[0]['soil_moisture_pct'], 18);
+    expect(bodies[1], {'test_on': false});
   });
 
   test('HttpPotaiApi traduce los errores a mensajes amigables', () async {

@@ -304,6 +304,35 @@ class ApiTests(BackendCase):
         ):
             self.assertEqual(self.call("POST /devices/{thingName}/command", body=rejected)[0], 400)
 
+    def test_test_mode_command(self):
+        status, body = self.call(
+            "POST /devices/{thingName}/command",
+            body={"test_on": True, "temperature_c": 31, "humidity_pct": 55, "soil_moisture_pct": 18.2},
+        )
+        self.assertEqual((status, body["accepted"]), (202, True))
+        self.assertEqual(
+            body["command"],
+            {"test_on": True, "temperature_c": 31.0, "humidity_pct": 55.0, "soil_moisture_pct": 18.2},
+        )
+        self.assertEqual(
+            self.iot.published[0]["payload"],
+            b'{"test_on":true,"temperature_c":31.0,"humidity_pct":55.0,"soil_moisture_pct":18.2}',
+        )
+        status, body = self.call("POST /devices/{thingName}/command", body={"test_on": False})
+        self.assertEqual(body["command"], {"test_on": False})
+        self.assertEqual(self.iot.published[1]["payload"], b'{"test_on":false}')
+        self.assertEqual(
+            self.call("POST /devices/{thingName}/command", body={"test_on": True, "temperature_c": 25})[0],
+            400,
+        )
+        self.assertEqual(
+            self.call(
+                "POST /devices/{thingName}/command",
+                body={"test_on": True, "temperature_c": 25, "humidity_pct": 140, "soil_moisture_pct": 10},
+            )[0],
+            400,
+        )
+
     def test_invalid_thing_and_unknown_route(self):
         self.assertEqual(self.call("GET /devices/{thingName}/dashboard", thing="otro")[0], 400)
         self.assertEqual(self.call("GET /devices/{thingName}/nada")[0], 404)

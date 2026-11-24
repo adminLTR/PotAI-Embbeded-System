@@ -25,6 +25,14 @@ abstract class PotaiApi {
 
   /// Pide un riego manual. La API lo publica en IoT y la ESP32 enciende la bomba.
   Future<void> water({int ml = 120});
+
+  /// Enciende o apaga el modo test. Con enabled, el ESP32 deja de leer sensores.
+  Future<void> setTestSensors({
+    required bool enabled,
+    required double temperatureC,
+    required double humidityPct,
+    required double soilMoisturePct,
+  });
 }
 
 /// Habla con la HTTP API de AWS (API Gateway + Lambda).
@@ -127,6 +135,32 @@ class HttpPotaiApi implements PotaiApi {
       202,
     );
   }
+
+  @override
+  Future<void> setTestSensors({
+    required bool enabled,
+    required double temperatureC,
+    required double humidityPct,
+    required double soilMoisturePct,
+  }) async {
+    final uri = Uri.parse('$baseUrl/devices/$thingName/command');
+    final body = enabled
+        ? {
+            'test_on': true,
+            'temperature_c': double.parse(temperatureC.toStringAsFixed(1)),
+            'humidity_pct': double.parse(humidityPct.toStringAsFixed(1)),
+            'soil_moisture_pct': double.parse(soilMoisturePct.toStringAsFixed(1)),
+          }
+        : {'test_on': false};
+    await _send(
+      () => _client.post(
+        uri,
+        headers: const {'content-type': 'application/json'},
+        body: jsonEncode(body),
+      ),
+      202,
+    );
+  }
 }
 
 /// Datos de ejemplo para ver la interfaz sin AWS ni ESP32.
@@ -134,6 +168,10 @@ class DemoPotaiApi implements PotaiApi {
   DemoPotaiApi({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   final DateTime Function() _clock;
+  bool testMode = false;
+  double testTemp = 25;
+  double testHum = 58;
+  double testSoil = 30;
 
   static const _plant = PlantInfo(
     id: 4,
@@ -165,14 +203,15 @@ class DemoPotaiApi implements PotaiApi {
       online: true,
       latest: LatestReading(
         seq: now ~/ 3000,
-        temperatureC: double.parse(_tempAt(now).toStringAsFixed(1)),
-        humidityPct: 58,
+        temperatureC: double.parse((testMode ? testTemp : _tempAt(now)).toStringAsFixed(1)),
+        humidityPct: testMode ? testHum : 58,
         valid: true,
-        soilMoisturePct: double.parse(soil.toStringAsFixed(1)),
+        soilMoisturePct: double.parse((testMode ? testSoil : soil).toStringAsFixed(1)),
         soilValid: true,
         plantId: _plant.id,
-        mlPredicted: soil < 40 ? 120 : 0,
+        mlPredicted: (testMode ? testSoil : soil) < 40 ? 120 : 0,
         pumpOn: false,
+        testMode: testMode,
         irrigationCount: irr.length,
         ageMs: 1500,
         ingestedAtMs: now - 1500,
@@ -219,5 +258,24 @@ class DemoPotaiApi implements PotaiApi {
   }
 
   @override
-  Future<void> water({int ml = 120}) async {}
+  Future<void> water({int ml = 120}) async {
+    if (testMode) {
+      testSoil = (testSoil + 45).clamp(0, 100).toDouble();
+    }
+  }
+
+  @override
+  Future<void> setTestSensors({
+    required bool enabled,
+    required double temperatureC,
+    required double humidityPct,
+    required double soilMoisturePct,
+  }) async {
+    testMode = enabled;
+    if (enabled) {
+      testTemp = temperatureC;
+      testHum = humidityPct;
+      testSoil = soilMoisturePct;
+    }
+  }
 }

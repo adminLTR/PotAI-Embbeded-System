@@ -128,6 +128,36 @@ class PotaiController extends ChangeNotifier {
     }
   }
 
+  /// Publica el modo test. Con enabled, el ESP32 deja de leer DHT11 y suelo.
+  Future<String> applyTest({
+    required bool enabled,
+    required double temperatureC,
+    required double humidityPct,
+    required double soilMoisturePct,
+  }) async {
+    if (!settings.isConfigured) return 'Conecta el dispositivo antes de usar el modo test.';
+    try {
+      await _apiFactory(settings).setTestSensors(
+        enabled: enabled,
+        temperatureC: temperatureC,
+        humidityPct: humidityPct,
+        soilMoisturePct: soilMoisturePct,
+      );
+      await refresh();
+      if (settings.demo && enabled) {
+        return 'Modo de ejemplo: la IA verá ${temperatureC.round()} °C, ${humidityPct.round()} % y suelo ${soilMoisturePct.round()} %.';
+      }
+      if (enabled) {
+        return 'Modo test activo. La maceta usa estos valores y no lee los sensores.';
+      }
+      return 'Modo real. La maceta vuelve a leer el DHT11 y el suelo.';
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'No se pudo cambiar el modo test.';
+    }
+  }
+
   /// Publica un riego manual en AWS. Devuelve el texto para mostrar al usuario.
   Future<String> requestWater({int ml = 120}) async {
     if (!settings.isConfigured) return 'Conecta el dispositivo antes de regar.';

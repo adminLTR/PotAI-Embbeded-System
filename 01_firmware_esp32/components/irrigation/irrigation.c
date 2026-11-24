@@ -93,6 +93,11 @@ static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t coun
         };
         s_cfg.record_cb(&rec, s_cfg.record_ctx);
     }
+
+    float simulated = 0.0f;
+    if (device_state_test_bump_soil(45.0f, now_ms(), &simulated)) {
+        ESP_LOGI(TAG, "[TEST] riego simulado: suelo ahora %.0f%%", (double)simulated);
+    }
     return delivered;
 }
 
@@ -143,16 +148,15 @@ static void irrigation_task(void *arg)
         if (!s_cfg.automatic) {
             continue;
         }
+        if (did_manual) {
+            next_auto = xTaskGetTickCount() + period;
+            continue;
+        }
         if ((int32_t)(xTaskGetTickCount() - next_auto) < 0) {
             continue;
         }
-        next_auto += period;
-        if ((int32_t)(xTaskGetTickCount() - next_auto) >= 0) {
-            next_auto = xTaskGetTickCount() + period;
-        }
-        if (did_manual) {
-            continue;
-        }
+        /* Los rechazos rapidos esperan un periodo entero desde ahora. */
+        next_auto = xTaskGetTickCount() + period;
 
         device_snapshot_t snap;
         device_state_copy(&snap);
@@ -198,6 +202,7 @@ static void irrigation_task(void *arg)
         water_plant(ml, duration_ms, count, snap.soil_moisture_pct, snap.temperature_c);
         last_end_ms = now_ms();
         had_irrigation = true;
+        next_auto = xTaskGetTickCount() + period;
     }
 }
 

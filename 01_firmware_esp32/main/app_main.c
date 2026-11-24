@@ -164,6 +164,11 @@ static void sensor_task(void *arg)
 #endif
     while(1){
         bool valid=false;float temperature_c=0.0f,humidity_pct=0.0f;uint64_t sample_time=now_ms();
+        if(device_state_test_touch(sample_time)){
+            device_snapshot_t forced;device_state_copy(&forced);
+            valid=true;temperature_c=forced.temperature_c;humidity_pct=forced.humidity_pct;
+            ESP_LOGI(TAG,"[TEST] sin sensores: T=%.1fC H=%.0f%% suelo=%.0f%%",(double)temperature_c,(double)humidity_pct,(double)forced.soil_moisture_pct);
+        }else{
 #if CONFIG_A10_FORCE_SENSOR_UNAVAILABLE_READS > 0
         if(forced_unavailable_count<(uint32_t)CONFIG_A10_FORCE_SENSOR_UNAVAILABLE_READS){forced_unavailable_count++;ESP_LOGW(TAG,"[EXT][DHT11] indisponibilidade forcada attempt=%lu/%d",(unsigned long)forced_unavailable_count,CONFIG_A10_FORCE_SENSOR_UNAVAILABLE_READS);}else
 #endif
@@ -175,11 +180,12 @@ static void sensor_task(void *arg)
         {float soil_pct=0.0f;int soil_raw=0;esp_err_t sret=soil_moisture_read(&soil_pct,&soil_raw);bool soil_ok=sret==ESP_OK;
             if(soil_ok)ESP_LOGI(TAG,"[LOCAL][SOIL] raw=%d soil_moisture_pct=%.1f",soil_raw,(double)soil_pct);else ESP_LOGW(TAG,"[LOCAL][SOIL] leitura falhou: %s raw=%d",esp_err_to_name(sret),soil_raw);
             device_state_update_soil(soil_pct,soil_raw,soil_ok,sample_time);}
+        }
         health_record_sensor_result(valid,sample_time);
         if(!valid&&!s_sensor_fault_active){s_sensor_fault_active=true;publish_item_t ev={.type=PUBLISH_ITEM_EVENT};strlcpy(ev.event_name,"sensor_unavailable",sizeof(ev.event_name));enqueue_publish_item(&ev);}
         else if(valid&&s_sensor_fault_active){s_sensor_fault_active=false;publish_item_t ev={.type=PUBLISH_ITEM_EVENT};strlcpy(ev.event_name,"sensor_recovered",sizeof(ev.event_name));enqueue_publish_item(&ev);}
         if(valid){device_snapshot_t snap;device_state_copy(&snap);publish_item_t item={.type=PUBLISH_ITEM_TELEMETRY,.telemetry={.device_id=CONFIG_A10_THING_NAME,.seq=++s_telemetry_seq,.temperature_c=snap.temperature_c,.humidity_pct=snap.humidity_pct,.valid=snap.sample_valid,.sample_uptime_ms=snap.sample_uptime_ms,
-            .soil_moisture_pct=snap.soil_moisture_pct,.soil_valid=snap.soil_valid,.plant_id=CONFIG_A10_PLANT_ID,.ml_predicted=snap.last_ml_predicted,.pump_on=snap.pump_on,.irrigation_count=snap.irrigation_count}};enqueue_publish_item(&item);}
+            .soil_moisture_pct=snap.soil_moisture_pct,.soil_valid=snap.soil_valid,.plant_id=CONFIG_A10_PLANT_ID,.ml_predicted=snap.last_ml_predicted,.pump_on=snap.pump_on,.irrigation_count=snap.irrigation_count,.test_mode=snap.test_mode}};enqueue_publish_item(&item);}
         vTaskDelayUntil(&last,pdMS_TO_TICKS(CONFIG_A10_SENSOR_PERIOD_MS));
     }
 }
@@ -217,6 +223,17 @@ static void command_task(void *arg)
             } else {
                 ESP_LOGI(TAG, "[CLOUD][COMMAND] riego manual %u ml aceptado",
                          (unsigned)command.data.irrigate.ml);
+            }
+        } else if (command.type == CLOUD_COMMAND_TEST) {
+            device_state_set_test_mode(command.data.test_sensors.on, command.data.test_sensors.temperature_c,
+                command.data.test_sensors.humidity_pct, command.data.test_sensors.soil_moisture_pct, now_ms());
+            if (command.data.test_sensors.on) {
+                ESP_LOGI(TAG, "[CLOUD][COMMAND] modo test ON T=%.1f H=%.0f suelo=%.0f",
+                         (double)command.data.test_sensors.temperature_c,
+                         (double)command.data.test_sensors.humidity_pct,
+                         (double)command.data.test_sensors.soil_moisture_pct);
+            } else {
+                ESP_LOGI(TAG, "[CLOUD][COMMAND] modo test OFF: vuelve a los sensores");
             }
         }
     }

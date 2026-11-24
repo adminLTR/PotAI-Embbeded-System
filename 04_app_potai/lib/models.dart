@@ -72,6 +72,7 @@ class LatestReading {
     required this.irrigationCount,
     required this.ageMs,
     required this.ingestedAtMs,
+    this.testMode = false,
   });
 
   final int seq;
@@ -86,6 +87,7 @@ class LatestReading {
   final int? irrigationCount;
   final int ageMs;
   final int ingestedAtMs;
+  final bool testMode;
 
   factory LatestReading.fromJson(Map<String, dynamic> json) => LatestReading(
         seq: _i(json['seq']) ?? 0,
@@ -100,6 +102,7 @@ class LatestReading {
         irrigationCount: _i(json['irrigation_count']),
         ageMs: _i(json['age_ms']) ?? 0,
         ingestedAtMs: _i(json['ingested_at_ms']) ?? 0,
+        testMode: json['test_mode'] as bool? ?? false,
       );
 }
 
