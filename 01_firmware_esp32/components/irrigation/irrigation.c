@@ -21,6 +21,10 @@ static QueueHandle_t s_manual_queue;
 /* Igual que la API: un pedido manual trae entre 10 y 500 ml. */
 #define MANUAL_ML_MIN 10u
 #define MANUAL_ML_MAX 500u
+/* Modo real y modo test: el modelo se consulta cada minuto. */
+#define CHECK_PERIOD_MS 60000u
+/* De momento la bomba no sigue los ml del modelo: un pulso fijo. */
+#define PUMP_PULSE_MS 3000u
 
 static uint64_t now_ms(void)
 {
@@ -47,10 +51,16 @@ uint32_t irrigation_duration_ms(float ml, uint32_t flow_ml_per_min, uint32_t max
     return ms;
 }
 
+static TickType_t decision_period(void)
+{
+    return pdMS_TO_TICKS(CHECK_PERIOD_MS);
+}
+
 /* Executa uma irrigacao completa. Retorna os ml efetivamente entregues. */
 static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t count_after,
                          float soil_before_pct, float temperature_c)
 {
+    duration_ms = PUMP_PULSE_MS;
     const uint64_t t_start = now_ms();
 
     if (pump_start(duration_ms) != ESP_OK) {
@@ -132,12 +142,12 @@ static void irrigation_task(void *arg)
     uint32_t count = 0;
     uint64_t last_end_ms = 0;
     bool had_irrigation = false;
-    const TickType_t period = pdMS_TO_TICKS(s_cfg.check_period_ms);
-    TickType_t next_auto = xTaskGetTickCount() + period;
+    TickType_t next_auto = xTaskGetTickCount() + decision_period();
 
     while (1) {
         const TickType_t wait = s_cfg.automatic ? ticks_until(next_auto) : portMAX_DELAY;
         ulTaskNotifyTake(pdTRUE, wait);
+        const TickType_t period = decision_period();
 
         uint16_t manual_ml = 0;
         const bool did_manual = xQueueReceive(s_manual_queue, &manual_ml, 0) == pdTRUE;
@@ -232,9 +242,9 @@ esp_err_t irrigation_start(const irrigation_config_t *config)
         return ESP_ERR_NO_MEM;
     }
     s_started = true;
-    ESP_LOGI(TAG, "ativo: planta=%u automatico=%d periodo=%lu ms cooldown=%lu s vazao=%lu ml/min max_on=%lu ms",
-             s_cfg.plant_id, s_cfg.automatic ? 1 : 0, (unsigned long)s_cfg.check_period_ms,
-             (unsigned long)s_cfg.cooldown_s, (unsigned long)s_cfg.flow_ml_per_min, (unsigned long)s_cfg.max_on_ms);
+    ESP_LOGI(TAG, "ativo: planta=%u automatico=%d periodo=%lu ms pulso=%lu ms",
+             s_cfg.plant_id, s_cfg.automatic ? 1 : 0,
+             (unsigned long)CHECK_PERIOD_MS, (unsigned long)PUMP_PULSE_MS);
     return ESP_OK;
 }
 
