@@ -23,8 +23,6 @@ static QueueHandle_t s_manual_queue;
 #define MANUAL_ML_MAX 500u
 /* Modo real y modo test: el modelo se consulta cada minuto. */
 #define CHECK_PERIOD_MS 60000u
-/* De momento la bomba no sigue los ml del modelo: un pulso fijo. */
-#define PUMP_PULSE_MS 3000u
 
 static uint64_t now_ms(void)
 {
@@ -60,7 +58,6 @@ static TickType_t decision_period(void)
 static float water_plant(float ml_predicted, uint32_t duration_ms, uint32_t count_after,
                          float soil_before_pct, float temperature_c)
 {
-    duration_ms = PUMP_PULSE_MS;
     const uint64_t t_start = now_ms();
 
     if (pump_start(duration_ms) != ESP_OK) {
@@ -242,9 +239,9 @@ esp_err_t irrigation_start(const irrigation_config_t *config)
         return ESP_ERR_NO_MEM;
     }
     s_started = true;
-    ESP_LOGI(TAG, "ativo: planta=%u automatico=%d periodo=%lu ms pulso=%lu ms",
-             s_cfg.plant_id, s_cfg.automatic ? 1 : 0,
-             (unsigned long)CHECK_PERIOD_MS, (unsigned long)PUMP_PULSE_MS);
+    ESP_LOGI(TAG, "ativo: planta=%u automatico=%d periodo=%lu ms vazao=%lu ml/min max_on=%lu ms",
+             s_cfg.plant_id, s_cfg.automatic ? 1 : 0, (unsigned long)CHECK_PERIOD_MS,
+             (unsigned long)s_cfg.flow_ml_per_min, (unsigned long)s_cfg.max_on_ms);
     return ESP_OK;
 }
 

@@ -264,7 +264,7 @@ menu "Riego automatico con IA (edge computing)"
         config A10_PUMP_FLOW_ML_PER_MIN
             int "Caudal de la bomba (ml/min)"
             range 10 20000
-            default 1200
+            default 1800
             help
                 Mida cuantos ml entrega la bomba en 1 minuto con su manguera real.
                 Tiempo de bomba = ml_recomendados / caudal.
@@ -272,7 +272,7 @@ menu "Riego automatico con IA (edge computing)"
         config A10_PUMP_MAX_ON_MS
             int "Tiempo maximo de bomba encendida por riego (ms)"
             range 500 300000
-            default 3000
+            default 30000
 
         config A10_PUMP_BEEP_COUNT
             int "Bips del buzzer al encender la bomba (0 = silencio)"
